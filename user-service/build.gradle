@@ -1,0 +1,71 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.1'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'org.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+// 1. 新增：版本管理中心，用于统一管理依赖版本
+ext {
+	// 根据你的 Spring Boot 3.x 版本，我们选择对应的 Spring Cloud 和 Alibaba Cloud 版本
+	set('springCloudVersion', "2023.0.1")
+	set('springCloudAlibabaVersion', "2023.0.1.0")
+}
+
+// 2. 新增：依赖管理，从这里导入上面定义的版本库
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+		mavenBom "com.alibaba.cloud:spring-cloud-alibaba-dependencies:${springCloudAlibabaVersion}"
+	}
+}
+
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	compileOnly 'org.projectlombok:lombok'
+	runtimeOnly 'com.h2database:h2'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+
+	// 3. 新增：Nacos 服务发现的依赖
+	implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery'
+<<<<<<< HEAD
+
+	// 【新增】Spring Security 依赖
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+
+	// 【新增】JWT 相关依赖
+	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+
+	implementation 'org.springframework.boot:spring-boot-starter-amqp'
+=======
+>>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

@@ -1,0 +1,68 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.1' // 使用我们确认过的稳定版本
+	id 'io.spring.dependency-management' version '1.1.5' // 这是一个较新的稳定版本
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	sourceCompatibility = '17'
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+// 1. 版本管理中心
+ext {
+	set('springCloudVersion', "2023.0.1")
+	set('springCloudAlibabaVersion', "2023.0.1.0")
+}
+
+// 2. 依赖管理，从这里导入上面定义的版本库
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+		mavenBom "com.alibaba.cloud:spring-cloud-alibaba-dependencies:${springCloudAlibabaVersion}"
+	}
+}
+
+dependencies {
+	// Web 和 API 功能
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// 数据库访问
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	// 服务间通信
+	implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+	// Nacos 服务发现
+	implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery'
+	implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+<<<<<<< HEAD
+	implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
+// 工具和驱动
+=======
+
+	// 工具和驱动
+>>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+	compileOnly 'org.projectlombok:lombok'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// 测试
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

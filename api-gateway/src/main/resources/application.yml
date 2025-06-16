@@ -1,0 +1,66 @@
+# 文件路径: api-gateway/src/main/resources/application.yml
+
+server:
+  port: 8888
+
+spring:
+  application:
+    name: api-gateway
+    servlet:
+      multipart:
+        enabled: true
+        # 单个文件的最大值，这里设置为10MB
+        max-file-size: 10MB
+        # 单次请求的总大小，也设置为10MB
+        max-request-size: 10MB
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+
+    # 文件路径: api-gateway/src/main/resources/application.yml
+
+    # ... server, spring, nacos 等配置保持不变 ...
+
+    gateway:
+      default-filters:
+        - AuthenticationFilter
+      routes:
+        - id: user-service-route
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+
+        - id: group-service-route
+          uri: lb://group-service
+          predicates:
+            - Path=/api/groups/**
+
+        - id: message-service-route
+          uri: lb://message-service
+          predicates:
+            - Path=/api/messages/**, /api/presence/**
+
+        - id: file-service-route
+          uri: lb://file-service
+          predicates:
+            - Path=/api/files/**
+
+        - id: websocket-route
+          uri: lb://message-service
+          predicates:
+            - Path=/ws/**
+
+        - id: auth-service-route
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/**
+
+# 文件路径: api-gateway/src/main/resources/application.yml
+
+# ... server, spring, gateway 等已有配置 ...
+
+# 【新增】JWT配置
+jwt:
+  # 这个密钥必须和 user-service 中的一模一样！
+  secret: eW91ci12ZXJ5LWxvbmctYW5kLXNlY3VyZS1zZWNyZXQta2V5LXRoYXQtbm8tb25lLWtub3dzLTEyMzQ1

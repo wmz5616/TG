@@ -1,0 +1,19 @@
+### 创建一个新群组
+# group-service 运行在 8082 端口
+POST http://localhost:8082/api/groups
+Content-Type: application/json
+
+{
+  "name": "技术交流一群",
+  "description": "这是我们第一个群组！",
+  "ownerId": 1
+}
+
+### 获取用户 1 加入的所有群组
+GET http://localhost:8082/api/groups/user/1
+
+### 测试1: 验证用户1是否在群1中 (应该是 true)
+GET http://localhost:8082/api/groups/1/members/1/exists
+
+### 测试2: 验证用户2是否在群1中 (应该是 false)
+GET http://localhost:8082/api/groups/1/members/2/exists

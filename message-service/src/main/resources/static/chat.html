@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+<<<<<<< HEAD
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini-Telegram</title>
+    <style>
+        /* 变量定义 */
+        :root {
+            --c-bg: #18222d;
+            --c-bg-light: #212c37;
+            --c-bg-lighter: #2a3542;
+            --c-text: #ffffff;
+            --c-text-light: #a3a3a3;
+            --c-primary: #3390ec;
+            --c-sent-bubble: #4f94f0;
+            --c-received-bubble: var(--c-bg-lighter);
+            --c-online: #4ade80;
+            --c-offline: #71717a;
+        }
+
+        /* 基础与重置 */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--c-bg);
+            color: var(--c-text);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* 主体布局 */
+        .app-container { display: flex; height: 100vh; }
+        .sidebar { width: 320px; min-width: 320px; background-color: var(--c-bg-light); border-right: 1px solid var(--c-bg-lighter); display: flex; flex-direction: column; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; background-color: var(--c-bg); }
+
+        /* 侧边栏头部 (Telegram风格) */
+        .sidebar-header { padding: 10px 15px; }
+        .search-container { position: relative; display: flex; align-items: center; }
+        .menu-button { position: absolute; left: 0; top: 0; height: 100%; background: none; border: none; cursor: pointer; padding: 0 12px; display: flex; align-items: center; justify-content: center; z-index: 2; border-radius: 50%; }
+        .menu-button:hover { background-color: rgba(255,255,255,0.1); }
+        .search-bar { background-color: var(--c-bg); border: none; border-radius: 20px; padding: 10px 15px 10px 45px; width: 100%; color: var(--c-text); font-size: 14px; }
+        .search-bar::placeholder { color: var(--c-text-light); }
+        .search-bar:focus { outline: 1px solid var(--c-primary); }
+
+        /* 会话列表与搜索结果 */
+        .conversation-list-container { position: relative; flex-grow: 1; overflow: hidden; }
+        .conversation-list { height: 100%; overflow-y: auto; }
+        .search-results { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--c-bg-light); z-index: 100; overflow-y: auto; display: none; }
+        .search-result-item { display: flex; align-items: center; padding: 10px 15px; cursor: pointer; }
+        .search-result-item:hover { background-color: var(--c-bg-lighter); }
+        .conversation-item { position: relative; display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid var(--c-bg); transition: background-color 0.2s; }
+        .conversation-item:hover { background-color: var(--c-bg-lighter); }
+        .conversation-item.active { background-color: var(--c-primary); }
+        .avatar-container { position: relative; margin-right: 12px; flex-shrink: 0; }
+        .avatar { width: 50px; height: 50px; border-radius: 50%; background-color: var(--c-primary); display: flex; align-items: center; justify-content: center; font-weight: 600; object-fit: cover; }
+        .status-dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--c-bg-light); background-color: var(--c-offline); }
+        .status-dot.online { background-color: var(--c-online); }
+        .conversation-details { flex-grow: 1; overflow: hidden; }
+        .conversation-name { font-weight: 600; font-size: 15px; }
+        .last-message-content { font-size: 14px; color: var(--c-text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+
+        /* 聊天区 */
+        #chat-area { display: none; flex-grow: 1; flex-direction: column; height: 100%; }
+        .chat-header { display: flex; align-items: center; padding: 10px 20px; background-color: var(--c-bg-light); border-bottom: 1px solid var(--c-bg-lighter); flex-shrink: 0; }
+        #chat-header-avatar { width: 40px; height: 40px; margin-right: 15px; }
+        #chat-status { font-size: 13px; color: var(--c-primary-light); height: 18px; transition: color 0.3s ease; }
+        .messages-window { flex-grow: 1; padding: 20px; overflow-y: auto; }
+        .message-row { display: flex; margin-bottom: 15px; }
+        .message-row.mine { justify-content: flex-end; }
+        .message-bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; line-height: 1.4; word-break: break-word; }
+        .message-row.mine .message-bubble { background-color: var(--c-sent-bubble); }
+        .message-row.other .message-bubble { background-color: var(--c-received-bubble); }
+        .message-content img { max-width: 100%; border-radius: 10px; margin-top: 5px; cursor: pointer; }
+        .message-input-area { display: flex; align-items: center; padding: 10px 20px; background-color: var(--c-bg-light); flex-shrink: 0; }
+        #message-content { flex-grow: 1; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 20px; padding: 12px 20px; color: var(--c-text); font-size: 15px; }
+        #message-content:focus { outline: none; border-color: var(--c-primary); }
+        .input-button { background: none; border: none; cursor: pointer; padding: 10px; }
+        .input-button svg { width: 24px; height: 24px; color: var(--c-text-light); }
+        .send-button { background-color: var(--c-primary); border: none; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 10px;}
+
+        /* 弹窗与遮罩层 */
+        .login-overlay, .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1001; }
+        .login-box, .modal-box { background-color: var(--c-bg-light); padding: 40px; border-radius: 12px; text-align: center; }
+        .login-box input { display: block; margin: 0 auto 15px auto; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 8px; padding: 12px; width: 220px; color: var(--c-text); }
+        .login-box button { background-color: var(--c-primary); border: none; border-radius: 8px; padding: 12px 20px; width: 220px; color: white; font-weight: 600; cursor: pointer; }
+
+        #create-group-modal, #profile-modal { display: none; }
+        .modal-box { width: 400px; text-align: left; }
+        .modal-box h3 { margin-bottom: 20px; }
+        .modal-box input, .modal-box textarea { width: 100%; text-align: left; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 8px; padding: 12px; color: var(--c-text); margin-bottom: 15px; }
+        #profile-bio { height: 80px; resize: none; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .modal-actions button { border: none; border-radius: 8px; padding: 10px 20px; font-weight: 600; cursor: pointer; width: auto; }
+        .modal-actions .btn-cancel { background-color: var(--c-bg-lighter); color: var(--c-text); }
+        .modal-actions .btn-create { background-color: var(--c-primary); color: white; }
+
+        /* 欢迎页面 */
+        #welcome-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; flex-grow: 1; text-align: center; color: var(--c-text-light); }
+        #welcome-screen svg { width: 80px; height: 80px; color: var(--c-bg-lighter); margin-bottom: 20px; }
+
+        /* 滑动菜单 */
+        .nav-menu { position: fixed; top: 0; left: 0; width: 280px; height: 100%; background-color: var(--c-bg-light); z-index: 1002; transform: translateX(-100%); transition: transform 0.3s ease-in-out; display: flex; flex-direction: column; }
+        .nav-menu.open { transform: translateX(0); }
+        .nav-menu-header { padding: 20px; background-color: var(--c-primary); cursor: pointer; }
+        .nav-menu-header:hover { background-color: var(--c-primary-light); }
+        .nav-menu-header .avatar { width: 60px; height: 60px; margin-bottom: 10px; background-color: white; color: var(--c-primary); }
+        .nav-menu-header h4 { font-size: 18px; }
+        .nav-menu-list { list-style: none; padding: 10px 0; }
+        .nav-menu-list li { display: flex; align-items: center; padding: 15px 20px; cursor: pointer; }
+        .nav-menu-list li:hover { background-color: var(--c-bg-lighter); }
+        .nav-menu-list li svg { margin-right: 20px; color: var(--c-text-light); }
+        #profile-avatar-preview { width: 100px; height: 100px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 20px; border: 3px solid var(--c-bg-lighter); }
+        #avatar-upload-btn { width: 100%; padding: 12px; border-radius: 8px; border: none; background-color: var(--c-bg-lighter); color: var(--c-text); cursor: pointer; margin-bottom: 15px; }
+
+        /* “无感”滚动条 */
+        .messages-window::-webkit-scrollbar, .conversation-list::-webkit-scrollbar, .search-results::-webkit-scrollbar { width: 6px; }
+        .messages-window::-webkit-scrollbar-track, .conversation-list::-webkit-scrollbar-track, .search-results::-webkit-scrollbar-track { background: transparent; }
+        .messages-window::-webkit-scrollbar-thumb, .conversation-list::-webkit-scrollbar-thumb, .search-results::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 3px; }
+        .messages-window:hover::-webkit-scrollbar-thumb, .conversation-list:hover::-webkit-scrollbar-thumb, .search-results:hover::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.25); }
+    </style>
+</head>
+<body>
+<div id="login-overlay" class="login-overlay">
+    <div class="login-box">
+        <h3>登录 Mini-Telegram</h3>
+        <p id="login-error" style="color: #f87171; height: 20px;"></p>
+        <input type="text" id="login-username" placeholder="用户名" value="testuser1">
+        <input type="password" id="login-password" placeholder="密码" value="password123" onkeydown="if(event.key === 'Enter') login()">
+        <button onclick="login()">登 录</button>
+    </div>
+</div>
+
+<div id="create-group-modal" class="modal-overlay">
+    <div class="modal-box">
+        <h3>创建新群组</h3>
+        <input type="text" id="group-name" placeholder="群组名称">
+        <input type="text" id="group-description" placeholder="群组描述（可选）">
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeCreateGroupModal()">取消</button>
+            <button class="btn-create" onclick="handleCreateGroup()">创建</button>
+        </div>
+    </div>
+</div>
+
+<div id="profile-modal" class="modal-overlay">
+    <div class="modal-box">
+        <h3>编辑个人资料</h3>
+        <img id="profile-avatar-preview" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="avatar">
+        <button id="avatar-upload-btn" onclick="triggerFileUpload()">更换头像</button>
+        <label for="profile-bio">个人简介</label>
+        <textarea id="profile-bio" placeholder="留下你的足迹..."></textarea>
+        <div class="modal-actions">
+            <button class="btn-cancel" onclick="closeProfileModal()">取消</button>
+            <button class="btn-create" onclick="handleUpdateProfile()">保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="nav-menu-overlay" class="modal-overlay" style="display: none; z-index: 1000;" onclick="closeNavMenu()"></div>
+<div id="nav-menu" class="nav-menu">
+    <div class="nav-menu-header" onclick="openProfileModal()">
+        <div id="nav-avatar" class="avatar"></div>
+        <h4 id="nav-username"></h4>
+    </div>
+    <ul class="nav-menu-list">
+        <li onclick="openCreateGroupModal()">
+            <svg fill="currentColor" width="24" height="24" viewBox="0 0 256 256"><path d="M168,128a12,12,0,0,1-12,12H132v24a12,12,0,0,1-24,0V140H84a12,12,0,0,1,0-24h24V92a12,12,0,0,1,24,0v24h24A12,12,0,0,1,168,128Zm80-40.75a12,12,0,0,1-7.1,11.07l-34.7,17.34.1,0L178.9,133a12,12,0,0,1-9,22.5h-1.5l-33.5-20.09.2.3a12,12,0,0,1-21.2,0l-.2-.3-33.5,20.09h-1.5a12,12,0,0,1-9-22.5l-27.4-17.15.1,0-34.7-17.34A12,12,0,0,1,8,87.25V72a12,12,0,0,1,12-12H236a12,12,0,0,1,12,12Z"></path></svg>
+            <span>创建群组</span>
+        </li>
+    </ul>
+</div>
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="search-container">
+                <button class="menu-button" onclick="openNavMenu()">
+                    <svg fill="var(--c-text-light)" width="24" height="24" viewBox="0 0 256 256"><path d="M224,128a12,12,0,0,1-12,12H44a12,12,0,0,1,0-24H212A12,12,0,0,1,224,128ZM44,76H212a12,12,0,0,0,0-24H44a12,12,0,0,0,0,24Zm168,104H44a12,12,0,0,0,0,24H212a12,12,0,0,0,0-24Z"></path></svg>
+                </button>
+                <input type="text" id="user-search-bar" class="search-bar" placeholder="搜索用户或群组" oninput="handleUserSearch(event)" onfocus="showSearchResults()" onblur="hideSearchResults()">
+            </div>
+        </div>
+        <div class="conversation-list-container">
+            <div id="conversation-list" class="conversation-list"></div>
+            <div id="search-results" class="search-results"></div>
+        </div>
+    </div>
+    <div class="main-content">
+        <div id="chat-area">
+            <div class="chat-header">
+                <div id="chat-header-avatar" class="avatar"></div>
+                <div>
+                    <h4 id="chat-title"></h4>
+                    <small id="chat-status"></small>
+                </div>
+            </div>
+            <div id="messages-window" class="messages-window"></div>
+            <div class="message-input-area">
+                <button class="input-button" onclick="triggerFileUpload()" title="上传文件">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256"><path d="M165.27,133.27a12,12,0,0,1-17,0L116,100.94V192a12,12,0,0,1-24,0V100.94L59.73,133.27a12,12,0,0,1-17-17l52-52a12,12,0,0,1,17,0l52,52A12,12,0,0,1,165.27,133.27ZM236,132a12,12,0,0,1-12,12H188a12,12,0,0,1,0-24h36V80H32v32H68a12,12,0,0,1,0,24H32a12,12,0,0,1-12-12V80A12,12,0,0,1,32,68H224a12,12,0,0,1,12,12Z"></path></svg>
+                </button>
+                <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="text" id="message-content" placeholder="输入消息..." onkeydown="handleKeydown(event)" oninput="handleTyping()">
+                <button class="send-button" onclick="sendMessage()" title="发送消息">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 256 256"><path d="M240,12.28a15.82,15.82,0,0,0-15.68-4L12.37,88.45a16,16,0,0,0,2.5,29.74l63.26,24.81,21.28,56.28A16,16,0,0,0,116,211.72a15.86,15.86,0,0,0,12.55-6.08l80-212A16,16,0,0,0,240,12.28ZM117.7,196.28l-21.27-56.28L176,84Z"></path></svg>
+                </button>
+            </div>
+        </div>
+        <div id="welcome-screen">
+            <svg width="80" height="80" fill="var(--c-bg-lighter)" viewBox="0 0 256 256"><path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a88,88,0,0,1-45.15-13.16L38.3,221.7a8,8,0,0,1-10-10L46.84,167.15A88,88,0,1,1,128,216Z"></path></svg>
+            <p style="color: var(--c-text-light); margin-top: 20px;">请从左侧选择一个会话开始聊天</p>
+=======
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chat App</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body { background-color: #f0f2f5; }
+        .chat-container { max-width: 800px; margin: 30px auto; }
+        .chat-window { height: 60vh; overflow-y: scroll; }
+        .message-item { background-color: white; }
+        .status.online { color: green; }
+        .status.offline { color: grey; }
+    </style>
+</head>
+<body>
+
+<div class="container chat-container">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+            <h4 class="mb-0">Mini-Telegram</h4>
+        </div>
+        <div class="card-body">
+            <div class="row align-items-center mb-3">
+                <div class="col-md-5">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-person"></i> 你的ID</span>
+                        <input type="text" id="userId" class="form-control" placeholder="例如: 1">
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <button id="connectBtn" onclick="connect()" class="btn btn-success">连接</button>
+                    <button id="disconnectBtn" onclick="disconnect()" class="btn btn-danger" disabled>断开连接</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>与 <strong id="chattingWith">...</strong> 的对话</span>
+                    <span id="recipientStatus" class="status"></span>
+                </div>
+                <div class="list-group list-group-flush chat-window" id="messages">
+                </div>
+            </div>
+
+            <div class="input-group mt-3">
+                <input type="hidden" id="recipientId" /> <input type="text" id="messageContent" class="form-control" placeholder="输入消息...">
+                <button class="btn btn-primary" onclick="sendMessage()">发送 <i class="bi bi-send"></i></button>
+            </div>
+>>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+<<<<<<< HEAD
+<script>
+    const GATEWAY_URL = 'http://localhost:8888';
+    var stompClient = null;
+    var currentUser = { id: null, username: null };
+    var currentChat = { id: null, type: null, name: null };
+    var userCache = {};
+    var statusUpdateInterval = null;
+    var activeSubscriptions = {};
+    var typingTimeout = null;
+    var searchDebounceTimeout = null;
+
+    // --- 辅助函数 ---
+    function handleKeydown(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }
+    function triggerFileUpload() { document.getElementById('file-input').click(); }
+    // 【【新增】】用于发起所有需认证API请求的辅助函数
+    async function fetchWithAuth(url, options = {}) {
+        const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            alert("认证信息不存在或已过期，请重新登录。");
+            window.location.reload();
+            return Promise.reject("No token found");
+        }
+        const defaultHeaders = { 'Authorization': `Bearer ${token}` };
+        if (!(options.body instanceof FormData)) {
+            defaultHeaders['Content-Type'] = 'application/json';
+        }
+        const finalHeaders = {
+            ...defaultHeaders,
+            ...options.headers
+        };
+
+        // 创建最终的fetch配置
+        const finalOptions = {
+            ...options,
+            headers: finalHeaders
+        };
+        return fetch(url, finalOptions);
+    }
+    // --- 核心认证与连接流程 ---
+    async function login() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value.trim();
+        const errorEl = document.getElementById('login-error');
+        if (!username || !password) {
+            errorEl.innerText = '请输入用户名和密码！';
+            return;
+        }
+        errorEl.innerText = '';
+        try {
+            const response = await fetch(`${GATEWAY_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            if (!response.ok) throw new Error('用户名或密码错误！');
+            const data = await response.json();
+            localStorage.setItem('jwt_token', data.jwt);
+            currentUser = { id: data.userId, username: data.username };
+            connectWebSocket();
+        } catch (error) {
+            errorEl.innerText = error.message;
+        }
+    }
+    // 在 <script> 标签内，找到这个函数并替换
+    function connectWebSocket() {
+        const token = localStorage.getItem('jwt_token');
+        const headers = { 'userId': currentUser.id };
+        const socket = new SockJS(`${GATEWAY_URL}/ws?token=${token}`);
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect(headers, frame => {
+            document.getElementById('login-overlay').style.display = 'none';
+
+            // 全局只订阅“用户资料更新”这一个频道，因为它与当前和谁聊天无关
+            stompClient.subscribe('/topic/users/updated', message => {
+                const updatedUser = JSON.parse(message.body);
+                console.log("收到用户资料更新广播:", updatedUser);
+                // 更新缓存和所有相关的UI元素
+                handleUserUpdate(updatedUser);
+            });
+
+            loadAndRenderConversations();
+        });
+    }
+    // --- 业务功能函数 ---
+    async function loadAndRenderConversations() {
+        try {
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/groups/user/${currentUser.id}`);
+            const groups = await res.json();
+            const privateRes = await fetchWithAuth(`${GATEWAY_URL}/api/messages/conversations/private/${currentUser.id}`);
+            const partnerIds = await privateRes.json();
+            let convos = [];
+            groups.forEach(g => convos.push({ id: g.id, type: 'GROUP', name: g.name }));
+            const userIdsToFetch = [...new Set(partnerIds)].filter(id => !userCache[id]);
+            if (userIdsToFetch.length > 0) {
+                const usersRes = await fetchWithAuth(`${GATEWAY_URL}/api/users/batch?ids=${userIdsToFetch.join(',')}`);
+                const users = await usersRes.json();
+                users.forEach(u => { userCache[u.id] = u; });
+            }
+            partnerIds.forEach(id => {
+                if(userCache[id]) convos.push({ id, type: 'PRIVATE', name: userCache[id].username });
+            });
+            renderConversationList(convos);
+            startStatusUpdates();
+        } catch (e) { console.error('获取会话列表失败:', e); }
+    }
+    // 在 <script> 标签内，找到这个函数并替换
+    async function selectConversation(element) {
+        currentChat = {
+            id: element.getAttribute('data-chat-id'),
+            type: element.getAttribute('data-chat-type'),
+            name: element.getAttribute('data-chat-name')
+        };
+
+        document.querySelectorAll('.conversation-item.active').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+        document.getElementById('welcome-screen').style.display = 'none';
+        document.getElementById('chat-area').style.display = 'flex';
+        document.getElementById('chat-title').innerText = currentChat.name;
+        // 更新聊天窗口头部的头像
+        const headerAvatarEl = document.getElementById('chat-header-avatar');
+        const chatPartner = userCache[currentChat.id];
+        if (currentChat.type === 'PRIVATE' && chatPartner && chatPartner.avatarUrl) {
+            headerAvatarEl.innerHTML = `<img src="${chatPartner.avatarUrl}" class="avatar">`;
+        } else {
+            headerAvatarEl.innerHTML = `<span>${currentChat.name.charAt(0).toUpperCase()}</span>`;
+        }
+        document.getElementById('chat-status').innerText = '';
+
+        const msgWindow = document.getElementById('messages-window');
+        msgWindow.innerHTML = '';
+
+        // 1. 取消所有旧的订阅
+        Object.values(activeSubscriptions).forEach(sub => sub.unsubscribe());
+        activeSubscriptions = {};
+
+        // 2. 根据会话类型，订阅新频道
+        // 订阅私聊频道
+        activeSubscriptions['private'] = stompClient.subscribe(`/user/${currentUser.id}/queue/messages`, msg => {
+            const parsedMsg = JSON.parse(msg.body);
+            if (currentChat.type === 'PRIVATE' && parsedMsg.senderId == currentChat.id) {
+                showMessage(parsedMsg);
+            }
+        });
+        // 订阅群聊频道
+        if (currentChat.type === 'GROUP') {
+            activeSubscriptions['group'] = stompClient.subscribe(`/topic/group/${currentChat.id}`, msg => {
+                const parsedMsg = JSON.parse(msg.body);
+                if (parsedMsg.senderId != currentUser.id) showMessage(parsedMsg);
+            });
+        }
+        // 订阅“正在输入”频道
+        activeSubscriptions['typing'] = stompClient.subscribe(`/topic/typing/${currentChat.id}`, typingInfo => {
+            const { username, isTyping } = JSON.parse(typingInfo.body);
+            const statusEl = document.getElementById('chat-status');
+            if (username !== currentUser.username) {
+                statusEl.innerText = isTyping ? `${username} 正在输入...` : '';
+                clearTimeout(typingTimeout);
+                if (isTyping) {
+                    typingTimeout = setTimeout(() => { statusEl.innerText = ''; }, 3000);
+                }
+            }
+        });
+
+        // 3. 加载历史记录
+        try {
+            const historyUrl = currentChat.type === 'GROUP'
+                ? `${GATEWAY_URL}/api/messages/group/${currentChat.id}/history`
+                : `${GATEWAY_URL}/api/messages/history?user1Id=${currentUser.id}&user2Id=${currentChat.id}`;
+            const res = await fetchWithAuth(historyUrl);
+            const messages = await res.json();
+            messages.forEach(showMessage);
+        } catch (e) { console.error('加载历史消息出错:', e); }
+    }
+    function sendMessage() {
+        const content = document.getElementById('message-content').value;
+        if (!content.trim() || !currentChat.id) return;
+
+        const payload = { senderId: currentUser.id, content: content, messageType: currentChat.type };
+        if (currentChat.type === 'GROUP') payload.groupId = currentChat.id;
+        else payload.recipientId = currentChat.id;
+
+        showMessage({ ...payload, timestamp: new Date().toISOString() });
+        document.getElementById('message-content').value = '';
+
+        fetchWithAuth(`${GATEWAY_URL}/api/messages`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        }).catch(e => console.error('发送消息失败:', e));
+    }
+    async function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const isProfileModalOpen = document.getElementById('profile-modal').style.display === 'flex';
+
+        try {
+            // 1. 将文件上传到 file-service
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, {
+                method: 'POST',
+                body: formData // 注意：当body是FormData时，fetchWithAuth不应设置Content-Type
+            });
+            if (!res.ok) throw new Error('文件上传失败');
+
+            const result = await res.json();
+            const imageUrl = result.url;
+
+            // 2. 根据当前场景，决定是更新头像还是发送图片消息
+            if (isProfileModalOpen) {
+                // 场景A：更新头像
+                const profileUpdateRes = await fetchWithAuth(`${GATEWAY_URL}/api/users/${currentUser.id}/profile`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ avatarUrl: imageUrl })
+                });
+                if (!profileUpdateRes.ok) throw new Error('更新头像信息失败');
+
+                const updatedUser = await profileUpdateRes.json();
+                userCache[currentUser.id] = updatedUser; // 更新前端缓存
+                document.getElementById('profile-avatar-preview').src = imageUrl; // 更新弹窗里的预览
+                document.getElementById('nav-avatar').innerHTML = `<img src="${imageUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`; // 更新主菜单头像
+                alert('头像更新成功！');
+
+            } else {
+                // 场景B：在聊天中发送图片
+                const content = `<img src="${imageUrl}" style="max-width:100%; border-radius:10px;" alt="image">`;
+                const payload = { senderId: currentUser.id, content: content, messageType: currentChat.type };
+                if (currentChat.type === 'GROUP') payload.groupId = currentChat.id;
+                else payload.recipientId = currentChat.id;
+
+                fetchWithAuth(`${GATEWAY_URL}/api/messages`, {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                }).catch(e => console.error('发送图片消息失败:', e));
+            }
+        } catch (e) {
+            alert('操作失败: ' + e.message);
+            console.error(e);
+        }
+        // 3. 清空文件输入框，以便可以再次上传同一个文件
+        event.target.value = '';
+    }
+    function renderConversationList(conversations) {
+        const list = document.getElementById('conversation-list');
+        list.innerHTML = '';
+        conversations.forEach(c => {
+            const item = document.createElement('div');
+            item.className = 'conversation-item';
+            if (c.type === 'PRIVATE') item.id = `convo-user-${c.id}`;
+            item.setAttribute('data-chat-id', c.id);
+            item.setAttribute('data-chat-type', c.type);
+            item.setAttribute('data-chat-name', c.name);
+            item.onclick = () => selectConversation(item);
+            let avatarHtml = `<div class="avatar">${c.name.charAt(0).toUpperCase()}</div>`;
+            if(c.type === 'PRIVATE' && userCache[c.id] && userCache[c.id].avatarUrl){
+                avatarHtml = `<img class="avatar" src="${userCache[c.id].avatarUrl}" alt="${c.name.charAt(0)}">`;
+            }
+            item.innerHTML = `<div class="avatar-container">${avatarHtml}${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}</div><div class="conversation-details"><span class="conversation-name">${c.name}</span><div class="last-message-content">${c.type === 'GROUP' ? '群聊' : '私聊'}</div></div>`;
+            list.appendChild(item);
+        });
+    }
+    function showMessage(message) {
+        const msgWindow = document.getElementById('messages-window');
+        const row = document.createElement('div');
+        row.className = `message-row ${message.senderId == currentUser.id ? 'mine' : 'other'}`;
+        const time = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        let contentHtml = message.content;
+        if (contentHtml && contentHtml.includes('<img')) {
+            contentHtml = message.content;
+        }
+        row.innerHTML = `<div class="message-bubble"><div class="message-content">${contentHtml}</div><div style="font-size:11px; text-align:right; margin-top:5px; color:var(--c-text-light);">${time}</div></div>`;
+        msgWindow.appendChild(row);
+        msgWindow.scrollTop = msgWindow.scrollHeight;
+    }
+    function startStatusUpdates() {
+        if (statusUpdateInterval) clearInterval(statusUpdateInterval);
+        updateAllStatuses();
+        statusUpdateInterval = setInterval(updateAllStatuses, 10000);
+    }
+    async function updateAllStatuses() {
+        const privateConvoItems = document.querySelectorAll('.conversation-item[data-chat-type="PRIVATE"]');
+        if (privateConvoItems.length === 0) return;
+        const userIds = Array.from(privateConvoItems).map(item => item.getAttribute('data-chat-id'));
+        try {
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/presence/status/batch?userIds=${userIds.join(',')}`);
+            const statuses = await res.json();
+            for (const userId in statuses) {
+                const convoItem = document.getElementById(`convo-user-${userId}`);
+                if (convoItem) {
+                    const dot = convoItem.querySelector('.status-dot');
+                    if(dot) dot.className = `status-dot ${statuses[userId].toLowerCase()}`;
+                }
+            }
+        } catch (e) { console.error("批量更新状态失败:", e); }
+    }
+
+    function openCreateGroupModal() {
+        closeNavMenu();
+        document.getElementById('create-group-modal').style.display = 'flex';
+    }
+
+    function closeCreateGroupModal() {
+        document.getElementById('create-group-modal').style.display = 'none';
+        document.getElementById('group-name').value = '';
+        document.getElementById('group-description').value = '';
+    }
+
+    /**
+     * 处理创建群组的逻辑（已整合UI优化）
+     */
+    async function handleCreateGroup() {
+        // 1. 获取用户输入
+        const name = document.getElementById('group-name').value.trim();
+        const description = document.getElementById('group-description').value.trim();
+
+        // 2. 验证输入
+        if (!name) {
+            alert('请输入群组名称！');
+            return;
+        }
+
+        try {
+            // 3. 发送认证请求
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/create`, {
+                method: 'POST',
+                body: JSON.stringify({ name, description })
+            });
+
+            // 4. 处理失败响应
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(errorText || '创建群组失败，请稍后再试。');
+            }
+
+            // 5. 处理成功响应
+            const newGroup = await response.json();
+            alert(`群组 "${newGroup.name}" 创建成功!`);
+
+            // 【【整合了你的修改意见】】
+            closeNavMenu(); // 先关闭滑出的主菜单
+            closeCreateGroupModal(); // 再关闭创建群组的弹窗
+            loadAndRenderConversations(); // 最后刷新列表
+
+        } catch (error) {
+            // 6. 处理异常
+            alert(error.message);
+            console.error('创建群组出错:', error);
+        }
+    }
+
+    // 【新增】处理滑动菜单的函数
+    function openNavMenu() {
+        const userAvatar = userCache[currentUser.id]?.avatarUrl;
+        const navAvatar = document.getElementById('nav-avatar');
+        if (userAvatar) {
+            navAvatar.innerHTML = `<img src="${userAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+        } else {
+            navAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
+        }
+        document.getElementById('nav-menu').classList.add('open');
+        document.getElementById('nav-menu-overlay').style.display = 'flex';
+        // 将当前登录用户信息填充到菜单头部
+        document.getElementById('nav-username').innerText = currentUser.username;
+        document.getElementById('nav-avatar').innerText = currentUser.username.charAt(0).toUpperCase();
+    }
+
+    function closeNavMenu() {
+        document.getElementById('nav-menu').classList.remove('open');
+        document.getElementById('nav-menu-overlay').style.display = 'none';
+    }
+
+    // 【新增】处理输入事件的函数
+    function handleTyping() {
+        if (!stompClient || !currentChat.id) return;
+        // 向后端发送“typing”事件，目的地是当前聊天室的ID，内容是当前用户的名字
+        stompClient.send(`/app/typing/${currentChat.id}`, {}, currentUser.username);
+    }
+
+    // 【【新增】】处理用户搜索的函数
+    function handleUserSearch(event) {
+        clearTimeout(searchDebounceTimeout);
+        const query = event.target.value.trim();
+        const resultsContainer = document.getElementById('search-results');
+
+        if (query.length < 2) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.style.display = 'none';
+            return;
+        }
+
+        // 使用防抖技术，停止输入500ms后才发送请求
+        searchDebounceTimeout = setTimeout(async () => {
+            try {
+                const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/search?query=${query}`);
+                const users = await response.json();
+                renderSearchResults(users);
+            } catch (error) {
+                console.error("搜索用户失败:", error);
+            }
+        }, 500);
+    }
+
+    // 【【新增】】渲染搜索结果
+    function renderSearchResults(users) {
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = '';
+        if (users.length === 0) {
+            resultsContainer.style.display = 'none';
+            return;
+        }
+
+        users.forEach(user => {
+            // 不在结果中显示自己
+            if (user.id == currentUser.id) return;
+
+            const item = document.createElement('div');
+            item.className = 'search-result-item';
+            // 点击结果后，发起私聊
+            item.onclick = () => startPrivateChat(user);
+            item.innerHTML = `
+                <div class="avatar">${user.username.charAt(0).toUpperCase()}</div>
+                <div style="margin-left: 10px;">${user.username}</div>
+            `;
+            resultsContainer.appendChild(item);
+        });
+        resultsContainer.style.display = 'block';
+    }
+
+    // 【【新增】】点击搜索结果后，发起私聊
+    function startPrivateChat(user) {
+        // 隐藏搜索结果
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = '';
+        resultsContainer.style.display = 'none';
+        document.getElementById('user-search-bar').value = '';
+
+        // 检查这个会话是否已存在于左侧列表
+        let convoExists = false;
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            if (item.getAttribute('data-chat-id') == user.id && item.getAttribute('data-chat-type') === 'PRIVATE') {
+                convoExists = true;
+                item.click(); // 如果已存在，直接模拟点击
+            }
+        });
+
+        // 如果会话不存在，则在左侧列表顶部手动创建一个新的
+        if (!convoExists) {
+            const list = document.getElementById('conversation-list');
+            const item = document.createElement('div');
+            item.className = 'conversation-item';
+            item.id = `convo-user-${user.id}`;
+            item.setAttribute('data-chat-id', user.id);
+            item.setAttribute('data-chat-type', 'PRIVATE');
+            item.setAttribute('data-chat-name', user.username);
+            item.onclick = () => selectConversation(item);
+            item.innerHTML = `
+                <div class="avatar-container">
+                    <div class="avatar">${user.username.charAt(0).toUpperCase()}</div>
+                    <div class="status-dot offline"></div>
+                </div>
+                <div class="conversation-details">
+                    <span class="conversation-name">${user.username}</span>
+                    <div class="last-message-content">私聊</div>
+                </div>`;
+            list.prepend(item); // prepend 添加到最前面
+            item.click(); // 创建后立即点击，打开聊天窗口
+        }
+    }
+
+    // 【新增】处理个人资料弹窗的函数
+    function openProfileModal() {
+        closeNavMenu(); // 如果主菜单是打开的，先关掉它
+
+        // 从我们缓存的用户信息中获取当前用户的资料
+        const currentUserProfile = userCache[currentUser.id] || currentUser;
+        const userAvatar = currentUserProfile.avatarUrl;
+        const userBio = currentUserProfile.bio;
+
+        const avatarPreview = document.getElementById('profile-avatar-preview');
+
+        // 如果用户有头像URL，就显示图片，否则可以隐藏图片框或显示一个默认图
+        if (userAvatar) {
+            avatarPreview.style.display = 'block';
+            avatarPreview.src = userAvatar;
+        } else {
+            avatarPreview.style.display = 'none';
+        }
+
+        // 填充个人简介
+        document.getElementById('profile-bio').value = userBio || '';
+
+        // 显示个人资料弹窗
+        document.getElementById('profile-modal').style.display = 'flex';
+    }
+
+    function closeProfileModal() {
+        document.getElementById('profile-modal').style.display = 'none';
+    }
+
+    async function handleUpdateProfile() {
+        const bio = document.getElementById('profile-bio').value;
+
+        try {
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/${currentUser.id}/profile`, {
+                method: 'PUT',
+                body: JSON.stringify({ bio: bio }) // 只发送简介信息
+            });
+
+            if (!response.ok) {
+                throw new Error('更新简介失败');
+            }
+
+            const updatedUser = await response.json();
+            userCache[currentUser.id] = updatedUser; // 更新前端缓存的用户信息
+
+            alert('个人资料已更新！');
+            closeProfileModal(); // 关闭弹窗
+
+        } catch(e) {
+            alert(e.message);
+            console.error("更新个人资料时出错: ", e);
+        }
+    }
+</script>
+=======
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script type="text/javascript">
+    // --- JavaScript 逻辑部分保持不变 ---
+    // 我们只修改了HTML和CSS，JS的核心功能几乎没有改变
+    var stompClient = null;
+
+    function connect() {
+        var userId = document.getElementById('userId').value;
+        if (!userId) { alert('请输入你的用户ID！'); return; }
+
+        var headers = { 'userId': userId };
+        var socket = new SockJS('http://localhost:8081/ws?userId=' + userId);
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect(headers, function (frame) {
+            console.log('连接成功: ' + frame);
+            document.getElementById('connectBtn').disabled = true;
+            document.getElementById('disconnectBtn').disabled = false;
+
+            // 简单模拟选择聊天对象
+            var otherUserId = (userId === '1') ? '2' : '1';
+            document.getElementById('recipientId').value = otherUserId;
+            document.getElementById('chattingWith').innerText = `用户 ${otherUserId}`;
+            checkRecipientStatus(); // 连接后立刻检查一次对方状态
+
+            // 获取历史消息
+            fetch(`http://localhost:8081/api/messages/history?user1Id=${userId}&user2Id=${otherUserId}`)
+                .then(response => response.json()).then(messages => {
+                document.getElementById('messages').innerHTML = '';
+                messages.forEach(function(message) { showMessage(message); });
+            });
+
+            // 订阅新消息
+            var destination = '/queue/messages/' + userId;
+            stompClient.subscribe(destination, function (message) { showMessage(JSON.parse(message.body)); });
+        });
+    }
+
+    function sendMessage() {
+        var senderId = document.getElementById('userId').value;
+        var recipientId = document.getElementById('recipientId').value;
+        var content = document.getElementById('messageContent').value;
+        if (!content) { return; } // 不发送空消息
+
+        fetch('http://localhost:8081/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ senderId, recipientId, content })
+        }).then(() => { document.getElementById('messageContent').value = ''; });
+    }
+
+    function showMessage(message) {
+        var messagesDiv = document.getElementById('messages');
+        var messageElement = document.createElement('a'); // 用<a>标签更符合list-group的样式
+        messageElement.className = 'list-group-item list-group-item-action';
+
+        var senderText = (message.senderId == document.getElementById('userId').value) ? '你' : `用户 ${message.senderId}`;
+        var timeText = new Date(message.timestamp).toLocaleTimeString();
+
+        messageElement.innerHTML = `
+            <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">${senderText}</h6>
+                <small>${timeText}</small>
+            </div>
+            <p class="mb-1">${message.content}</p>
+        `;
+        messagesDiv.appendChild(messageElement);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function checkRecipientStatus() {
+        var recipientId = document.getElementById('recipientId').value;
+        var statusSpan = document.getElementById('recipientStatus');
+        if (!recipientId) { statusSpan.innerHTML = ''; return; }
+        fetch(`http://localhost:8081/api/presence/status/${recipientId}`)
+            .then(response => response.text()).then(statusText => {
+            var statusClass = statusText === 'Online' ? 'online' : 'offline';
+            var icon = statusText === 'Online' ? 'bi-check-circle-fill' : 'bi-circle';
+            statusSpan.innerHTML = `<i class="bi ${icon} ${statusClass}"></i> ${statusText}`;
+        });
+    }
+
+    // disconnect 函数保持不变
+    function disconnect() {
+        if (stompClient !== null) { stompClient.disconnect(); }
+        document.getElementById('connectBtn').disabled = false;
+        document.getElementById('disconnectBtn').disabled = true;
+        document.getElementById('chattingWith').innerText = '...';
+        document.getElementById('recipientStatus').innerHTML = '';
+        console.log("已断开连接");
+    }
+</script>
+
+>>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+</body>
+</html>

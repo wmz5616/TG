@@ -1,0 +1,37 @@
+### API 1: 创建一个新用户 "zhangsan"
+# @name createUser1
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+  "username": "zhangsan",
+  "email": "zhangsan@example.com"
+}
+
+###
+
+### API 2: 创建另一个新用户 "lisi"
+# @name createUser2
+POST http://localhost:8080/api/users
+Content-Type: application/json
+
+{
+  "username": "lisi",
+  "email": "lisi@example.com"
+}
+
+###
+
+### API 3: 获取所有用户列表
+# @name getAllUsers
+GET http://localhost:8080/api/users
+
+###
+
+### API 4: 获取 ID 为 1 的用户
+GET http://localhost:8080/api/users/1
+
+###
+
+### API 5: 获取一个不存在的用户 (比如 ID 99)
+GET http://localhost:8080/api/users/99

@@ -1,0 +1,46 @@
+### 测试 1: 发送一条合法的消息 (用户ID 1 发给 用户ID 2)
+# 端口号是 8081，这是 message-service 的端口
+POST http://localhost:8081/api/messages
+Content-Type: application/json
+
+{
+  "senderId": 1,
+  "recipientId": 2,
+  "content": "你好，我是张三，能收到吗？"
+}
+
+
+### 测试 2: 尝试从一个不存在的用户(ID=99)发送消息
+POST http://localhost:8081/api/messages
+Content-Type: application/json
+
+{
+  "senderId": 99,
+  "recipientId": 1,
+  "content": "一条注定失败的消息"
+}
+
+### ==================== 群聊消息测试 ====================
+
+### 测试 1: 合法成员(用户1)在群1中发言 (应该成功)
+POST http://localhost:8081/api/messages
+Content-Type: application/json
+
+{
+  "messageType": "GROUP",
+  "senderId": 1,
+  "groupId": 1,
+  "content": "大家好，我是群主，这是第一条群消息！"
+}
+
+
+### 测试 2: 非法成员(用户2)尝试在群1中发言 (应该失败)
+POST http://localhost:8081/api/messages
+Content-Type: application/json
+
+{
+  "messageType": "GROUP",
+  "senderId": 2,
+  "groupId": 1,
+  "content": "我不是群成员，我能发言吗？"
+}
