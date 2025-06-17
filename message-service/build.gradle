@@ -47,14 +47,9 @@ dependencies {
 	implementation 'org.springframework.cloud:spring-cloud-starter-loadbalancer'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-<<<<<<< HEAD
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
 
 // 工具和驱动
-=======
-
-	// 工具和驱动
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 	compileOnly 'org.projectlombok:lombok'
 	runtimeOnly 'com.mysql:mysql-connector-j'
 	annotationProcessor 'org.projectlombok:lombok'

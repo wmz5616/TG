@@ -51,7 +51,6 @@ dependencies {
 
 	// 3. 新增：Nacos 服务发现的依赖
 	implementation 'com.alibaba.cloud:spring-cloud-starter-alibaba-nacos-discovery'
-<<<<<<< HEAD
 
 	// 【新增】Spring Security 依赖
 	implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -62,8 +61,6 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
 
 	implementation 'org.springframework.boot:spring-boot-starter-amqp'
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 }
 
 tasks.named('test') {

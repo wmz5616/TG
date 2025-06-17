@@ -2,20 +2,13 @@ package com.example.messageservice.controller;
 
 import com.example.messageservice.model.Message;
 import com.example.messageservice.service.MessageService;
-<<<<<<< HEAD
 import org.springframework.web.bind.annotation.*;
-=======
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
-
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/messages")
 public class MessageController {
 
-<<<<<<< HEAD
     // 1. 我们不再使用 @Autowired 在这里
     private final MessageService messageService;
 
@@ -48,20 +41,4 @@ public class MessageController {
     public List<Long> getPrivateConversations(@PathVariable Long userId) {
         return messageService.getPrivateConversationPartnerIds(userId);
     }
-=======
-    @Autowired
-    private MessageService messageService;
-
-    @PostMapping
-    public Message sendMessage(@RequestBody Message message) {
-        // Controller 的职责非常单纯：接收请求，把它完整地交给 Service 去处理，然后把处理结果返回。
-        return messageService.sendMessage(message);
-    }
-
-    @GetMapping("/history")
-    public List<Message> getHistory(@RequestParam Long user1Id, @RequestParam Long user2Id) {
-        // @RequestParam 用于获取 URL 查询参数，例如 ?user1Id=1&user2Id=2
-        return messageService.getChatHistory(user1Id, user2Id);
-    }
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 }

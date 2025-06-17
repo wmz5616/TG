@@ -8,5 +8,7 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     // 根据方法名自动生成查询：查找所有 userId 匹配的记录
     List<GroupMember> findByUserId(Long userId);
+    List<GroupMember> findByGroupId(Long groupId);
     boolean existsByGroupIdAndUserId(Long groupId, Long userId);
+    void deleteByGroupIdAndUserId(Long groupId, Long userId);
 }

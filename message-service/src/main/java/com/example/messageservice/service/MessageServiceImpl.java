@@ -2,7 +2,6 @@ package com.example.messageservice.service;
 
 import com.example.messageservice.client.GroupClient;
 import com.example.messageservice.client.UserClient;
-<<<<<<< HEAD
 import com.example.messageservice.config.RabbitMQConfig;
 import com.example.messageservice.dto.MessageStatusUpdate;
 import com.example.messageservice.dto.ReadReceiptPayload;
@@ -15,21 +14,10 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-=======
-import com.example.messageservice.model.Message;
-import com.example.messageservice.model.MessageType;
-import com.example.messageservice.repository.MessageRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Service;
-
-import java.util.List; // Make sure this import is present
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 
 @Service
 public class MessageServiceImpl implements MessageService {
 
-<<<<<<< HEAD
     private final MessageRepository messageRepository;
     private final UserClient userClient;
     private final GroupClient groupClient;
@@ -109,38 +97,11 @@ public class MessageServiceImpl implements MessageService {
         return message;
     }
 
-=======
-    @Autowired
-    private MessageRepository messageRepository;
-
-    @Autowired
-    private UserClient userClient;
-
-    @Autowired
-    private GroupClient groupClient;
-
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
-
-    @Override
-    public Message sendMessage(Message message) {
-        if (MessageType.PRIVATE.equals(message.getMessageType())) {
-            return handlePrivateMessage(message);
-        } else if (MessageType.GROUP.equals(message.getMessageType())) {
-            return handleGroupMessage(message);
-        } else {
-            throw new IllegalArgumentException("不支持的消息类型: " + message.getMessageType());
-        }
-    }
-
-    // This is the missing method. Add it back.
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
     @Override
     public List<Message> getChatHistory(Long user1Id, Long user2Id) {
         return messageRepository.findChatHistory(user1Id, user2Id);
     }
 
-<<<<<<< HEAD
     @Override
     public List<Message> getGroupChatHistory(Long groupId) {
         return messageRepository.findByGroupIdOrderByTimestampAsc(groupId);
@@ -149,39 +110,32 @@ public class MessageServiceImpl implements MessageService {
     @Override
     public List<Long> getPrivateConversationPartnerIds(Long userId) {
         return messageRepository.findPrivateConversationPartnerIds(userId);
-=======
-    private Message handlePrivateMessage(Message message) {
-        Object sender = userClient.getUserById(message.getSenderId());
-        if (sender == null) {
-            throw new IllegalArgumentException("发送者用户不存在，ID: " + message.getSenderId());
-        }
-        Object recipient = userClient.getUserById(message.getRecipientId());
-        if (recipient == null) {
-            throw new IllegalArgumentException("接收者用户不存在，ID: " + message.getRecipientId());
-        }
-
-        Message savedMessage = messageRepository.save(message);
-        String destination = "/queue/messages/" + savedMessage.getRecipientId();
-        messagingTemplate.convertAndSend(destination, savedMessage);
-        System.out.println("私聊消息已发送: " + savedMessage);
-        return savedMessage;
     }
 
-    private Message handleGroupMessage(Message message) {
-        Long senderId = message.getSenderId();
-        Long groupId = message.getGroupId();
-
-        boolean isMember = groupClient.isUserMember(groupId, senderId);
-        if (!isMember) {
-            throw new IllegalArgumentException("发送失败，用户 " + senderId + " 不是群 " + groupId + " 的成员。");
-        }
-
+    @Override
+    public Message saveAndBroadcastMessage(Message message) {
+        // 1. 将消息存入数据库，这一步会为 message 对象生成 ID 和 timestamp
         Message savedMessage = messageRepository.save(message);
 
-        String destination = "/topic/group/" + groupId;
-        messagingTemplate.convertAndSend(destination, savedMessage);
-        System.out.println("群聊消息已发送: " + savedMessage);
+        // 2. 根据消息类型，通过WebSocket推送到目的地
+        if (MessageType.PRIVATE.equals(savedMessage.getMessageType())) {
+            // 推送给接收者
+            messagingTemplate.convertAndSendToUser(
+                    savedMessage.getRecipientId().toString(),
+                    "/queue/messages",
+                    savedMessage
+            );
+            // 推送回给发送者（用于多端同步和UI更新）
+            messagingTemplate.convertAndSendToUser(
+                    savedMessage.getSenderId().toString(),
+                    "/queue/messages",
+                    savedMessage
+            );
+        } else if (MessageType.GROUP.equals(savedMessage.getMessageType())) {
+            // 群聊消息直接广播到群组的 topic
+            messagingTemplate.convertAndSend("/topic/group/" + savedMessage.getGroupId(), savedMessage);
+        }
+
         return savedMessage;
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
     }
 }

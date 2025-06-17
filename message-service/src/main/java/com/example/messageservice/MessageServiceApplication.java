@@ -11,10 +11,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 public class MessageServiceApplication {
 
 	public static void main(String[] args) {
-<<<<<<< HEAD
 
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 		SpringApplication.run(MessageServiceApplication.class, args);
 	}
 

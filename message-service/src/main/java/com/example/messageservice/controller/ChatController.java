@@ -25,7 +25,7 @@ public class ChatController {
     // 处理新聊天消息 (保持不变)
     @MessageMapping("/chat")
     public void processMessage(@Payload Message message) {
-        messageService.processAndSendMessage(message);
+            messageService.saveAndBroadcastMessage(message);
     }
 
     // 处理“消息已读”回执 (保持不变)

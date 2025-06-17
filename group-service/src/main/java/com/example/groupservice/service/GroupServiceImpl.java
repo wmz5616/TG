@@ -1,9 +1,6 @@
 package com.example.groupservice.service;
 
-<<<<<<< HEAD
 import com.example.groupservice.dto.CreateGroupRequest;
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 import com.example.groupservice.model.Group;
 import com.example.groupservice.model.GroupMember;
 import com.example.groupservice.repository.GroupMemberRepository;
@@ -14,10 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List; // 确保导入
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 @Service
 public class GroupServiceImpl implements GroupService {
 
@@ -27,7 +21,6 @@ public class GroupServiceImpl implements GroupService {
     @Autowired
     private GroupMemberRepository groupMemberRepository;
 
-<<<<<<< HEAD
     // 【新增】实现新的创建群组方法
     @Override
     @Transactional
@@ -45,20 +38,6 @@ public class GroupServiceImpl implements GroupService {
         GroupMember ownerAsMember = new GroupMember();
         ownerAsMember.setGroupId(savedGroup.getId());
         ownerAsMember.setUserId(ownerId);
-=======
-    @Override
-    @Transactional // 2. 关键注解！
-    public Group createGroup(Group group) {
-        // 步骤一：保存群组信息到数据库，这样我们就能获得一个带ID的group对象
-        Group savedGroup = groupRepository.save(group);
-
-        // 步骤二：创建一个新的 GroupMember 对象，将群主添加为第一个成员
-        GroupMember ownerAsMember = new GroupMember();
-        ownerAsMember.setGroupId(savedGroup.getId());
-        ownerAsMember.setUserId(savedGroup.getOwnerId());
-
-        // 步骤三：保存群成员信息到数据库
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
         groupMemberRepository.save(ownerAsMember);
 
         return savedGroup;
@@ -88,25 +67,71 @@ public class GroupServiceImpl implements GroupService {
     public boolean isUserMemberOfGroup(Long groupId, Long userId) {
         return groupMemberRepository.existsByGroupIdAndUserId(groupId, userId);
     }
-<<<<<<< HEAD
 
     @Override
     public void addMember(Long groupId, Long userId) {
-        // 1. 检查用户是否已经是成员，避免重复添加
-        boolean isAlreadyMember = groupMemberRepository.existsByGroupIdAndUserId(groupId, userId);
+
+    }
+
+    @Override
+    @Transactional // 添加事务注解，保证操作的原子性
+    public void addMember(Long groupId, Long userIdToAdd, Long inviterId) {
+        // 1. 查找群组信息
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found with id: " + groupId));
+
+        // 2. 【【安全校验】】检查发起邀请的人是否是群主
+        if (!group.getOwnerId().equals(inviterId)) {
+            // 如果不是群主，则抛出异常，阻止操作
+            throw new SecurityException("Access Denied: Only the group owner can add members.");
+        }
+
+        // 3. 检查用户是否已经是成员，避免重复添加
+        boolean isAlreadyMember = groupMemberRepository.existsByGroupIdAndUserId(groupId, userIdToAdd);
         if (isAlreadyMember) {
-            // 如果已经是成员，可以什么都不做，或者抛出一个异常
-            System.out.println("用户 " + userId + " 已经是群 " + groupId + " 的成员了。");
+            // 这里可以保持静默，或者抛出特定异常让前端知道“用户已在群里”
+            System.out.println("User " + userIdToAdd + " is already a member of group " + groupId);
             return;
         }
 
-        // 2. 如果不是成员，则创建新的成员关系并保存
+        // 4. 如果校验通过，则创建新的成员关系并保存
         GroupMember newMember = new GroupMember();
         newMember.setGroupId(groupId);
-        newMember.setUserId(userId);
+        newMember.setUserId(userIdToAdd);
         groupMemberRepository.save(newMember);
-        System.out.println("成功将用户 " + userId + " 添加到群 " + groupId);
+        System.out.println("Successfully added user " + userIdToAdd + " to group " + groupId);
     }
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+
+    @Override
+    public List<Long> getMemberIdsByGroupId(Long groupId) {
+        // 1. 调用 repository 方法获取成员关系列表
+        List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
+
+        // 2. 使用 Java Stream API 从成员关系对象中提取出 userId，并收集成一个新的列表
+        return members.stream()
+                .map(GroupMember::getUserId)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public void removeMember(Long groupId, Long userIdToRemove, Long removerId) {
+        // 1. 查找群组信息
+        Group group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new RuntimeException("Group not found with id: " + groupId));
+
+        // 2. 【安全校验】检查发起操作的人 (removerId) 是否是群主
+        if (!group.getOwnerId().equals(removerId)) {
+            throw new SecurityException("Access Denied: Only the group owner can remove members.");
+        }
+
+        // 3. 【业务逻辑校验】群主不能移除自己
+        if (group.getOwnerId().equals(userIdToRemove)) {
+            throw new IllegalArgumentException("Group owner cannot be removed.");
+        }
+
+        // 4. 执行删除操作
+        groupMemberRepository.deleteByGroupIdAndUserId(groupId, userIdToRemove);
+        System.out.println("Successfully removed user " + userIdToRemove + " from group " + groupId);
+    }
 }

@@ -1,6 +1,5 @@
 package com.example.userservice.service;
 
-<<<<<<< HEAD
 import com.example.userservice.dto.ProfileUpdateRequest;
 import com.example.userservice.dto.RegistrationRequest;
 import com.example.userservice.exception.UsernameAlreadyExistsException;
@@ -40,32 +39,6 @@ public class UserServiceImpl implements UserService {
         // 默认头像或简介可以在这里设置
         // newUser.setAvatarUrl("default_avatar.png");
         return userRepository.save(newUser);
-=======
-import com.example.userservice.model.User;
-import com.example.userservice.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import java.util.List;
-
-@Service // 1. 使用 @Service 注解，告诉 Spring 这是一个 Service 组件
-public class UserServiceImpl implements UserService { // 2. 实现我们刚刚定义的 UserService 接口
-
-    // 3. 把 UserRepository 注入到 Service 层
-    @Autowired
-    private UserRepository userRepository;
-
-    @Override // 4. 实现接口中定义的方法
-    public List<User> getAllUsers() {
-        // 目前业务简单，直接调用 repository
-        // 未来复杂逻辑都写在这里
-        return userRepository.findAll();
-    }
-
-    @Override // 5. 实现接口中定义的方法
-    public User createUser(User user) {
-        // 未来可以在这里对 user 对象进行处理，比如密码加密等
-        return userRepository.save(user);
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
     }
 
     @Override
@@ -73,7 +46,6 @@ public class UserServiceImpl implements UserService { // 2. 实现我们刚刚�
         return userRepository.findById(id).orElse(null);
     }
 
-<<<<<<< HEAD
     @Override
     public List<User> getUsersByIds(List<Long> ids) {
         return userRepository.findAllById(ids);
@@ -111,6 +83,4 @@ public class UserServiceImpl implements UserService { // 2. 实现我们刚刚�
 
         return updatedUser;
     }
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
 }

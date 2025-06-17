@@ -1,28 +1,16 @@
 package com.example.groupservice.controller;
 
-<<<<<<< HEAD
+import com.example.groupservice.dto.AddMemberRequest;
 import com.example.groupservice.dto.CreateGroupRequest;
 import com.example.groupservice.model.Group;
+import com.example.groupservice.repository.GroupRepository;
 import com.example.groupservice.service.GroupService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-=======
 import com.example.groupservice.model.Group;
-import com.example.groupservice.service.GroupService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import java.util.List; // 确保导入
-import org.springframework.web.bind.annotation.GetMapping; // 确保导入
-import org.springframework.web.bind.annotation.PathVariable; // 确保导入
-
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -31,7 +19,9 @@ public class GroupController {
     @Autowired
     private GroupService groupService;
 
-<<<<<<< HEAD
+    @Autowired
+    private GroupRepository groupRepository;
+
     @PostMapping("/create")
     public ResponseEntity<Group> createNewGroup(
             @RequestBody CreateGroupRequest request,
@@ -40,11 +30,6 @@ public class GroupController {
     ) {
         Group createdGroup = groupService.createGroup(request, userId);
         return new ResponseEntity<>(createdGroup, HttpStatus.CREATED);
-=======
-    @PostMapping
-    public Group createGroup(@RequestBody Group group) {
-        return groupService.createGroup(group);
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
     }
 
     @GetMapping("/user/{userId}")
@@ -56,15 +41,53 @@ public class GroupController {
     public boolean isUserMember(@PathVariable Long groupId, @PathVariable Long userId) {
         return groupService.isUserMemberOfGroup(groupId, userId);
     }
-<<<<<<< HEAD
 
-    // --- 这里是我们的修改 ---
-    // 我们将 @PostMapping 改为了 @GetMapping，这样就可以直接通过浏览器地址栏来调用了。
-    // 注意：在正式项目中，修改数据的操作（如添加成员）仍然推荐使用 POST。
-    @GetMapping("/{groupId}/members/{userId}")
-    public void addMember(@PathVariable Long groupId, @PathVariable Long userId) {
-        groupService.addMember(groupId, userId);
+    @PostMapping("/{groupId}/members")
+    public ResponseEntity<?> addMember(
+            @PathVariable Long groupId,
+            @RequestBody AddMemberRequest request,
+            @RequestHeader("X-Authenticated-User-Id") Long inviterId) {
+        try {
+            groupService.addMember(groupId, request.getUserId(), inviterId);
+            return ResponseEntity.ok().body("Member added successfully.");
+        } catch (SecurityException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        }
     }
-=======
->>>>>>> 1a87df0d7045169a8a3e9611973c7c556173448b
+
+    @GetMapping("/{groupId}/members")
+    public ResponseEntity<List<Long>> getGroupMembers(@PathVariable Long groupId) {
+        List<Long> memberIds = groupService.getMemberIdsByGroupId(groupId);
+        return ResponseEntity.ok(memberIds);
+    }
+
+    @DeleteMapping("/{groupId}/members/{userId}")
+    public ResponseEntity<?> removeMember(
+            @PathVariable Long groupId,
+            @PathVariable("userId") Long userIdToRemove, // 将路径变量重命名为userIdToRemove以示清晰
+            @RequestHeader("X-Authenticated-User-Id") Long removerId) {
+
+        try {
+            groupService.removeMember(groupId, userIdToRemove, removerId);
+            return ResponseEntity.ok().body("Member removed successfully.");
+        } catch (SecurityException e) {
+            // 如果不是群主操作，返回403 Forbidden
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            // 如果试图移除群主，返回400 Bad Request
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (Exception e) {
+            // 其他未知错误
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+        }
+    }
+    @GetMapping("/{groupId}")
+    public ResponseEntity<Group> getGroupById(@PathVariable Long groupId) {
+        // 利用JPA Repository自带的findById方法
+        return groupRepository.findById(groupId)
+                .map(ResponseEntity::ok) // 如果找到了，返回 200 OK 和群组信息
+                .orElse(ResponseEntity.notFound().build()); // 如果没找到，返回 404 Not Found
+    }
 }
