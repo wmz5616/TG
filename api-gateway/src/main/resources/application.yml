@@ -10,9 +10,9 @@ spring:
       multipart:
         enabled: true
         # 单个文件的最大值，这里设置为10MB
-        max-file-size: 10MB
+        max-file-size: 1000MB
         # 单次请求的总大小，也设置为10MB
-        max-request-size: 10MB
+        max-request-size: 1000MB
   cloud:
     nacos:
       discovery:

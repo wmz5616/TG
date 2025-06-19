@@ -121,6 +121,9 @@
 
         .message-status-icon { margin-left: 5px; font-weight: bold; color: var(--c-text-light); /* 默认灰色 */}
         .message-status-icon.read { color: var(--c-primary); /* 已读后变为蓝色 */}
+        .message-image-container { display: block; max-width: 300px; max-height: 400px; border-radius: 12px; overflow: hidden; cursor: pointer; background-color: var(--c-bg); aspect-ratio: 4 / 3; }
+        .message-image-container img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+        .message-bubble:has(.message-image-container) { padding: 0; background-color: transparent; }
     </style>
 </head>
 <body>
@@ -481,42 +484,69 @@
         document.getElementById('message-content').value = '';
     }
 
+    // 【【用下面的代码，完整替换你现有的 handleFileUpload 函数】】
+
+    // 【【用下面的代码，完整替换你现有的 handleFileUpload 函数】】
+
     async function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
+
+        if (!currentChat.id) {
+            alert("请先选择一个聊天窗口，然后再发送文件。");
+            event.target.value = '';
+            return;
+        }
+
         const formData = new FormData();
         formData.append('file', file);
-        const isProfileModalOpen = document.getElementById('profile-modal').style.display === 'flex';
+
         try {
             const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, {
                 method: 'POST',
                 body: formData
             });
+
             if (!res.ok) throw new Error('文件上传失败');
             const result = await res.json();
-            const imageUrl = result.url;
-            if (isProfileModalOpen) {
-                const profileUpdateRes = await fetchWithAuth(`${GATEWAY_URL}/api/users/profile`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ avatarUrl: imageUrl })
-                });
-                if (!profileUpdateRes.ok) throw new Error('更新头像信息失败');
-                const updatedUser = await profileUpdateRes.json();
-                userCache[currentUser.id] = updatedUser;
-                document.getElementById('profile-avatar-preview').src = imageUrl;
-                document.getElementById('nav-avatar').innerHTML = `<img src="${imageUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
-                alert('头像更新成功！');
+            const fileUrl = result.url;
+
+            let content = '';
+            const isImage = file.type.startsWith('image/');
+
+            if (isImage) {
+                // 【【核心修改】】
+                // 如果是图片，生成一个带容器的HTML结构
+                // 这个 message-image-container 就是我们的“智能相框”
+                content = `
+                <div class="message-image-container" onclick="window.open('${fileUrl}')">
+                    <img src="${fileUrl}" alt="图片加载中..." />
+                </div>
+            `;
             } else {
-                const content = `<img src="${imageUrl}" style="max-width:100%; border-radius:10px;" alt="image">`;
-                const payload = { senderId: currentUser.id, content: content, messageType: currentChat.type };
-                if (currentChat.type === 'GROUP') payload.groupId = currentChat.id;
-                else payload.recipientId = currentChat.id;
-                stompClient.send("/app/chat", {}, JSON.stringify(payload));
+                // 非图片文件保持不变
+                content = `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--c-primary); text-decoration: underline;">文件: ${file.name}</a>`;
             }
+
+            const payload = {
+                senderId: currentUser.id,
+                content: content,
+                messageType: currentChat.type
+            };
+
+            if (currentChat.type === 'GROUP') {
+                payload.groupId = currentChat.id;
+            } else {
+                payload.recipientId = currentChat.id;
+            }
+
+            stompClient.send("/app/chat", {}, JSON.stringify(payload));
+
         } catch (e) {
             alert('操作失败: ' + e.message);
             console.error(e);
         }
+
         event.target.value = '';
     }
 
