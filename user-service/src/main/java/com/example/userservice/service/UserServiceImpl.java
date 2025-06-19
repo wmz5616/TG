@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 import java.util.Optional;
 
@@ -29,15 +28,16 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User registerNewUser(RegistrationRequest registrationRequest) {
-        if (userRepository.findByUsername(registrationRequest.getUsername()).isPresent()) {
-            throw new UsernameAlreadyExistsException("Error: Username '" + registrationRequest.getUsername() + "' is already taken!");
+        // 【【修改】】检查 customId 是否已存在，并使用正确的参数名 registrationRequest
+        if (userRepository.findByCustomId(registrationRequest.getCustomId()).isPresent()) {
+            throw new UsernameAlreadyExistsException("Error: ID '" + registrationRequest.getCustomId() + "' is already taken!");
         }
         User newUser = new User();
+        // 【【修改】】统一使用 registrationRequest
         newUser.setUsername(registrationRequest.getUsername());
+        newUser.setCustomId(registrationRequest.getCustomId());
         newUser.setPassword(passwordEncoder.encode(registrationRequest.getPassword()));
         newUser.setEmail(registrationRequest.getEmail());
-        // 默认头像或简介可以在这里设置
-        // newUser.setAvatarUrl("default_avatar.png");
         return userRepository.save(newUser);
     }
 
@@ -62,22 +62,21 @@ public class UserServiceImpl implements UserService {
     public User updateUserProfile(Long userId, ProfileUpdateRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + userId));
+        if (request.getUsername() != null && !request.getUsername().isEmpty()) {
+            user.setUsername(request.getUsername());
+        }
 
-        // 如果请求中包含 avatarUrl，则更新
         if (request.getAvatarUrl() != null && !request.getAvatarUrl().isEmpty()) {
             user.setAvatarUrl(request.getAvatarUrl());
         }
 
-        // 如果请求中包含 bio，则更新
         if (request.getBio() != null) {
             user.setBio(request.getBio());
         }
 
         User updatedUser = userRepository.save(user);
 
-        // 【【关键新增】】
-        // 将更新后的用户信息，作为一个事件，发送到RabbitMQ的交换机中
-        // message-service 将会监听到这个事件，并把它广播给所有在线的客户端
+        // 将更新事件发送到RabbitMQ (此部分逻辑不变)
         rabbitTemplate.convertAndSend("im-exchange", "user.profile.updated", updatedUser);
         System.out.println("【事件发送】用户资料已更新，发送通知: " + updatedUser.getUsername());
 

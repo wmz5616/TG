@@ -131,7 +131,7 @@
     <div class="login-box">
         <h3>登录 Mini-Telegram</h3>
         <p id="login-error" style="color: #f87171; height: 20px;"></p>
-        <input type="text" id="login-username" placeholder="用户名" >
+        <input type="text" id="login-id" placeholder="ID号">
         <input type="password" id="login-password" placeholder="密码" onkeydown="if(event.key === 'Enter') login()">
         <button onclick="login()">登 录</button>
     </div>
@@ -152,9 +152,13 @@
 <div id="profile-modal" class="modal-overlay">
     <div class="modal-box">
         <h3>编辑个人资料</h3>
-        <img id="profile-avatar-preview" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" alt="avatar">
-        <button id="avatar-upload-btn" onclick="triggerFileUpload()">更换头像</button>
-        <label for="profile-bio">个人简介</label>
+        <img id="profile-avatar-preview" src="..." alt="avatar">
+        <button id="avatar-upload-btn" onclick="triggerAvatarUpload()">更换头像</button>
+
+        <label for="profile-username" style="display:block; margin-top:15px;">昵称</label>
+        <input type="text" id="profile-username" placeholder="设置你的昵称">
+
+        <label for="profile-bio" style="display:block; margin-top:15px;">个人简介</label>
         <textarea id="profile-bio" placeholder="留下你的足迹..."></textarea>
         <div class="modal-actions">
             <button class="btn-cancel" onclick="closeProfileModal()">取消</button>
@@ -223,6 +227,7 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256"><path d="M165.27,133.27a12,12,0,0,1-17,0L116,100.94V192a12,12,0,0,1-24,0V100.94L59.73,133.27a12,12,0,0,1-17-17l52-52a12,12,0,0,1,17,0l52,52A12,12,0,0,1,165.27,133.27ZM236,132a12,12,0,0,1-12,12H188a12,12,0,0,1,0-24h36V80H32v32H68a12,12,0,0,1,0,24H32a12,12,0,0,1-12-12V80A12,12,0,0,1,32,68H224a12,12,0,0,1,12,12Z"></path></svg>
                 </button>
                 <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)">
+                <input type="file" id="avatar-file-input" style="display: none;" onchange="handleAvatarUpload(event)" accept="image/*">
                 <input type="text" id="message-content" placeholder="输入消息..." onkeydown="handleKeydown(event)" oninput="handleTyping()">
                 <button class="send-button" onclick="sendMessage()" title="发送消息">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="white" viewBox="0 0 256 256"><path d="M240,12.28a15.82,15.82,0,0,0-15.68-4L12.37,88.45a16,16,0,0,0,2.5,29.74l63.26,24.81,21.28,56.28A16,16,0,0,0,116,211.72a15.86,15.86,0,0,0,12.55-6.08l80-212A16,16,0,0,0,240,12.28ZM117.7,196.28l-21.27-56.28L176,84Z"></path></svg>
@@ -252,6 +257,7 @@
     // --- 辅助函数 ---
     function handleKeydown(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }
     function triggerFileUpload() { document.getElementById('file-input').click(); }
+    function triggerAvatarUpload() { document.getElementById('avatar-file-input').click(); }
 
     async function fetchWithAuth(url, options = {}) {
         const token = localStorage.getItem('jwt_token');
@@ -271,7 +277,7 @@
 
     // --- 核心认证与连接 ---
     async function login() {
-        const username = document.getElementById('login-username').value.trim();
+        const username = document.getElementById('login-id').value.trim();
         const password = document.getElementById('login-password').value.trim();
         const errorEl = document.getElementById('login-error');
         if (!username || !password) {
@@ -283,9 +289,9 @@
             const response = await fetch(`${GATEWAY_URL}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username: loginId, password })
             });
-            if (!response.ok) throw new Error('用户名或密码错误！');
+            if (!response.ok) throw new Error('ID号或密码错误！');
             const data = await response.json();
             localStorage.setItem('jwt_token', data.jwt);
             currentUser = { id: data.userId, username: data.username };
@@ -808,6 +814,11 @@
         const currentUserProfile = userCache[currentUser.id] || currentUser;
         const userAvatar = currentUserProfile.avatarUrl;
         const userBio = currentUserProfile.bio;
+
+        // 【关键】重置状态，清除上一次可能上传的头像URL
+        const profileModal = document.getElementById('profile-modal');
+        profileModal.removeAttribute('data-new-avatar-url');
+
         const avatarPreview = document.getElementById('profile-avatar-preview');
         if (userAvatar) {
             avatarPreview.style.display = 'block';
@@ -815,8 +826,9 @@
         } else {
             avatarPreview.style.display = 'none';
         }
-        document.getElementById('profile-bio').value = userBio || '';
-        document.getElementById('profile-modal').style.display = 'flex';
+        document.getElementById('profile-username').value = currentUserProfile.username || '';
+        document.getElementById('profile-bio').value = currentUserProfile.bio || '';
+        profileModal.style.display = 'flex';
     }
 
     function closeProfileModal() {
@@ -825,16 +837,45 @@
 
     async function handleUpdateProfile() {
         const bio = document.getElementById('profile-bio').value;
+        const username = document.getElementById('profile-username').value.trim();
+        const newAvatarUrl = document.getElementById('profile-modal').getAttribute('data-new-avatar-url');
+
+        // 创建一个 payload，只包含有变化的数据
+        const payload = {};
+        let hasUpdate = false;
+
+        if (username && username !== (userCache[currentUser.id]?.username || '')) {
+            payload.username = username;
+            hasUpdate = true;
+        }
+        if (bio !== (userCache[currentUser.id]?.bio || '')) {
+            payload.bio = bio;
+            hasUpdate = true;
+        }
+        if (newAvatarUrl) {
+            payload.avatarUrl = newAvatarUrl;
+            hasUpdate = true;
+        }
+
+        // 如果没有任何更新，则直接关闭弹窗
+        if (!hasUpdate) {
+            closeProfileModal();
+            return;
+        }
+
         try {
             const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/profile`, {
                 method: 'PUT',
-                body: JSON.stringify({ bio: bio })
+                body: JSON.stringify(payload) // 发送包含新头像URL和/或简介的请求
             });
-            if (!response.ok) throw new Error('更新简介失败');
-            const updatedUser = await response.json();
-            userCache[currentUser.id] = updatedUser;
+            if (!response.ok) throw new Error('更新个人资料失败');
+
+            // 后端在成功后会通过 RabbitMQ 和 WebSocket 广播事件 (user.profile.updated)
+            // 前端的 handleUserUpdate 函数会自动监听到并刷新UI，所以这里不需要手动更新
+
             alert('个人资料已更新！');
             closeProfileModal();
+
         } catch(e) {
             alert(e.message);
             console.error("更新个人资料时出错: ", e);
@@ -849,37 +890,35 @@
     function handleUserUpdate(updatedUser) {
         if (!updatedUser || !updatedUser.id) return;
 
-        // 1. 更新前端的用户信息缓存 (逻辑不变)
+        // 1. 【防御性代码】在处理之前，打印出接收到的原始 avatarUrl
+        console.log(`Received profile update for user ${updatedUser.id}. Raw avatarUrl:`, updatedUser.avatarUrl);
+
+        // 2. 更新前端的用户信息缓存
         userCache[updatedUser.id] = updatedUser;
 
-        // 2. 【最终重构】更新左侧会话列表中的头像
+        // 3. 更新左侧会话列表中的头像
         const convoItem = document.getElementById(`convo-user-${updatedUser.id}`);
         if (convoItem) {
-            const oldAvatarEl = convoItem.querySelector('.avatar'); // 精确找到旧的头像元素
-            if (oldAvatarEl) {
-                let newAvatarEl;
-                if (updatedUser.avatarUrl) {
-                    // 方法一：创建全新的 <img> 元素
-                    newAvatarEl = document.createElement('img');
-                    newAvatarEl.className = 'avatar';
-                    newAvatarEl.src = updatedUser.avatarUrl;
-                    newAvatarEl.alt = updatedUser.username.charAt(0);
+            const avatarContainer = convoItem.querySelector('.avatar-container'); // 找到头像的容器
+            if (avatarContainer) {
+                let newAvatarHtml;
+                // 【防御性代码】再次检查 avatarUrl 是否是有效的 http 链接
+                if (updatedUser.avatarUrl && updatedUser.avatarUrl.startsWith('http')) {
+                    newAvatarHtml = `<img class="avatar" src="${updatedUser.avatarUrl}" alt="${updatedUser.username.charAt(0)}">`;
                 } else {
-                    // 方法二：创建全新的 <div> 元素
-                    newAvatarEl = document.createElement('div');
-                    newAvatarEl.className = 'avatar';
-                    newAvatarEl.textContent = updatedUser.username.charAt(0).toUpperCase();
+                    newAvatarHtml = `<div class="avatar">${updatedUser.username.charAt(0).toUpperCase()}</div>`;
                 }
-                // 用创建好的新元素，直接替换掉旧的头像元素
-                oldAvatarEl.replaceWith(newAvatarEl);
+                // 加上状态点
+                const statusDot = avatarContainer.querySelector('.status-dot');
+                avatarContainer.innerHTML = newAvatarHtml + (statusDot ? statusDot.outerHTML : '<div class="status-dot offline"></div>');
             }
         }
 
-        // 3. 如果当前正与该用户聊天，则更新聊天窗口顶部的头像 (逻辑不变)
+        // 4. 如果当前正与该用户聊天，则更新聊天窗口顶部的头像
         if (currentChat.id == updatedUser.id) {
             const headerAvatarEl = document.getElementById('chat-header-avatar');
             if (headerAvatarEl) {
-                if (updatedUser.avatarUrl) {
+                if (updatedUser.avatarUrl && updatedUser.avatarUrl.startsWith('http')) {
                     headerAvatarEl.innerHTML = `<img src="${updatedUser.avatarUrl}" class="avatar">`;
                 } else {
                     headerAvatarEl.innerHTML = `<span>${updatedUser.username.charAt(0).toUpperCase()}</span>`;
@@ -887,11 +926,11 @@
             }
         }
 
-        // 4. 如果是当前登录用户本人更新了资料，则同步更新左上角菜单里的头像 (逻辑不变)
+        // 5. 如果是当前登录用户本人更新了资料，则同步更新左上角菜单里的头像
         if (currentUser.id == updatedUser.id) {
             const navAvatar = document.getElementById('nav-avatar');
             if (navAvatar) {
-                if (updatedUser.avatarUrl) {
+                if (updatedUser.avatarUrl && updatedUser.avatarUrl.startsWith('http')) {
                     navAvatar.innerHTML = `<img src="${updatedUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
                 } else {
                     navAvatar.innerHTML = updatedUser.username.charAt(0).toUpperCase();
@@ -997,6 +1036,41 @@
         } catch (error) {
             alert(`移除失败: ${error.message}`);
             console.error('移除群成员时出错:', error);
+        }
+    }
+
+    async function handleAvatarUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            // 1. 调用 file-service 上传文件
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!res.ok) throw new Error('头像上传失败');
+            const result = await res.json();
+            const newAvatarUrl = result.url; // 获取到新的头像 URL
+
+            // 2. 更新个人资料弹窗中的头像预览
+            const avatarPreview = document.getElementById('profile-avatar-preview');
+            avatarPreview.src = newAvatarUrl;
+            avatarPreview.style.display = 'block';
+
+            // 3. 【关键】将新的 URL 存储在按钮的一个自定义属性中，方便“保存”时获取
+            document.getElementById('profile-modal').setAttribute('data-new-avatar-url', newAvatarUrl);
+
+        } catch (e) {
+            alert('操作失败: ' + e.message);
+            console.error(e);
+        } finally {
+            // 清空文件输入框的值，以便用户可以再次选择同一个文件
+            event.target.value = '';
         }
     }
 </script>

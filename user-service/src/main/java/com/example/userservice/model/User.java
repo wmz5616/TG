@@ -7,13 +7,17 @@ import lombok.Data;
 @Entity
 @Table(name = "users")
 public class User {
-    // ... id, username, password, email 字段保持不变 ...
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    // 【【修改1】】移除 unique = true 约束，用户名现在可以重复
+    @Column(nullable = false)
     private String username;
+
+    // 【【新增】】添加唯一的、用户可自定义的ID号
+    @Column(nullable = false, unique = true)
+    private String customId;
 
     @Column(nullable = false)
     private String password;

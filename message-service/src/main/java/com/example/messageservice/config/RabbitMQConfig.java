@@ -4,58 +4,77 @@ import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * RabbitMQ 配置类
- * 用于定义交换机、队列和它们之间的绑定关系
+ * RabbitMQ 配置类 (已重构)
+ * 为不同类型的消息定义了独立的队列和路由规则
  */
 @Configuration
 public class RabbitMQConfig {
 
-    // 定义交换机的名称
+    // 交换机名称 (保持不变)
     public static final String EXCHANGE_NAME = "im-exchange";
 
-    // 定义队列的名称
-    public static final String QUEUE_NAME = "im-queue";
+    // ----- 【新增】专用于处理用户资料更新、上下线等事件的队列 -----
+    public static final String USER_EVENTS_QUEUE_NAME = "user-events-queue";
+    public static final String USER_EVENTS_ROUTING_KEY = "user.#"; // 匹配所有以 "user." 开头的路由键
 
-    // 定义路由键 (Routing Key) 的模式
-    // im.message.# 表示可以匹配所有以 im.message. 开头的路由键
-    public static final String ROUTING_KEY_PATTERN = "im.message.#";
+    // ----- 【修改】专用于处理聊天消息的队列 -----
+    // 为了清晰，我们将原来的 QUEUE_NAME 重命名
+    public static final String MESSAGE_QUEUE_NAME = "message-queue";
+    public static final String MESSAGE_ROUTING_KEY = "im.message.#"; // 匹配所有以 "im.message." 开头的路由键
 
     /**
      * 创建一个主题类型的交换机 (Topic Exchange)
-     * @return TopicExchange
      */
     @Bean
     public TopicExchange exchange() {
         return new TopicExchange(EXCHANGE_NAME);
     }
-    @Bean
-    public org.springframework.amqp.support.converter.MessageConverter jsonMessageConverter() {
-        return new org.springframework.amqp.support.converter.Jackson2JsonMessageConverter();
-    }
-
 
     /**
-     * 创建一个持久化的队列 (Durable Queue)
-     * @return Queue
+     * 【【新增】】创建用户事件队列
      */
     @Bean
-    public Queue queue() {
-        return new Queue(QUEUE_NAME);
+    public Queue userEventsQueue() {
+        return new Queue(USER_EVENTS_QUEUE_NAME);
     }
 
     /**
-     * 创建一个绑定 (Binding)
-     * 将我们定义的队列和交换机绑定在一起，并指定路由键模式
-     * @param queue 队列Bean
-     * @param exchange 交换机Bean
-     * @return Binding
+     * 【【新增】】将用户事件队列绑定到交换机
+     * 所有路由键以 "user." 开头的消息都会被路由到这个队列
      */
     @Bean
-    public Binding binding(Queue queue, TopicExchange exchange) {
-        return BindingBuilder.bind(queue).to(exchange).with(ROUTING_KEY_PATTERN);
+    public Binding userEventsBinding(Queue userEventsQueue, TopicExchange exchange) {
+        return BindingBuilder.bind(userEventsQueue).to(exchange).with(USER_EVENTS_ROUTING_KEY);
+    }
+
+    /**
+     * 【【修改】】创建聊天消息队列 (原im-queue)
+     */
+    @Bean
+    public Queue messageQueue() {
+        return new Queue(MESSAGE_QUEUE_NAME);
+    }
+
+    /**
+     * 【【修改】】将聊天消息队列绑定到交换机
+     * 所有路由键以 "im.message." 开头的消息都会被路由到这个队列
+     */
+    @Bean
+    public Binding messageBinding(Queue messageQueue, TopicExchange exchange) {
+        return BindingBuilder.bind(messageQueue).to(exchange).with(MESSAGE_ROUTING_KEY);
+    }
+
+    /**
+     * 定义一个全局的消息转换器，让 RabbitMQ 可以处理 JSON 格式的对象
+     */
+    @Bean
+    public MessageConverter jsonMessageConverter() {
+        return new Jackson2JsonMessageConverter();
     }
 }

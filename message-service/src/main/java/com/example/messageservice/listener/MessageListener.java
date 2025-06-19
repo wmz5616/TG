@@ -19,7 +19,7 @@ public class MessageListener {
         this.messagingTemplate = messagingTemplate;
     }
 
-    @RabbitListener(queues = RabbitMQConfig.QUEUE_NAME)
+    @RabbitListener(queues = RabbitMQConfig.MESSAGE_QUEUE_NAME)
     public void handleMessage(Message message) {
         // 1. 将消息存入数据库，这一步会为 message 对象生成 ID 和 timestamp
         Message savedMessage = messageRepository.save(message);

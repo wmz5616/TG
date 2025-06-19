@@ -40,12 +40,10 @@ public class UserController {
         }
 
         // 2. 【【授权核心】】检查数据库中用户的名字，是否和当前通过JWT认证的用户名一致
-        if (!userInDb.getUsername().equals(authenticatedUsername)) {
-            // 如果不一致，说明用户在尝试访问别人的信息，返回 403 Forbidden (禁止访问)
+        if (!userInDb.getCustomId().equals(authenticatedUsername)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
 
-        // 3. 如果一致，说明是用户本人在操作，返回 200 OK 和用户信息
         return ResponseEntity.ok(userInDb);
     }
 

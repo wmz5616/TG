@@ -56,15 +56,16 @@ public class AuthController {
             throw new Exception("Incorrect username or password", e);
         }
 
+        // 这里的 userDetails.getUsername() 将会返回 customId
         final UserDetails userDetails = userDetailsService.loadUserByUsername(authenticationRequest.getUsername());
 
-        // 从数据库中获取完整的 User 对象，以便拿到 ID
-        final User user = userRepository.findByUsername(userDetails.getUsername())
+        // 使用 customId 从数据库获取完整的 User 对象
+        final User user = userRepository.findByCustomId(userDetails.getUsername())
                 .orElseThrow(() -> new Exception("User not found after authentication"));
 
         final String jwt = jwtUtil.generateToken(userDetails, user.getId());
 
-        // 返回包含 JWT、userId 和 username 的完整响应
+        // 返回的 username 是可以重复的显示名称
         return ResponseEntity.ok(new AuthenticationResponse(jwt, user.getId(), user.getUsername()));
     }
 }
