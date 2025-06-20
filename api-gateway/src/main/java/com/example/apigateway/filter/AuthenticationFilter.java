@@ -19,7 +19,12 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
     @Autowired
     private JwtUtil jwtUtil;
 
-    private final List<String> publicRoutes = List.of("/api/auth/register", "/api/auth/login", "/chat.html");
+    private final List<String> publicRoutes = List.of(
+            "/api/auth/register",
+            "/api/auth/login",
+            "/chat.html",
+            "/api/stickers/file-proxy" // <-- 新增这一行，允许对贴纸代理的匿名访问
+    );
 
     public AuthenticationFilter() {
         super(Config.class);

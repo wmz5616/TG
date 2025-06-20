@@ -1148,12 +1148,14 @@
     // 这是一个新的辅助函数，用于获取单个贴纸文件的真实URL
     async function getStickerFileUrl(fileId) {
         try {
-            // 【【修正URL拼接语法】】
+            // 1. 先通过我们的后端获取文件的元信息（包含file_path）
             const fileInfoRes = await fetchWithAuth(`${GATEWAY_URL}/api/stickers/file/${fileId}`);
             const fileInfoData = await fileInfoRes.json();
+
             if (fileInfoData.ok) {
-                const botToken = "7602124228:AAFz5xjjkZVCrhd2Fqgxsbho5J_NsVCYddI"; // 【【请确保这里替换成了您自己的Token】】
-                return `https://api.telegram.org/file/bot${botToken}/${fileInfoData.result.file_path}`;
+                const filePath = fileInfoData.result.file_path;
+                // 2.【【核心修改】】返回指向我们自己代理接口的URL，而不是Telegram的
+                return `<span class="math-inline">\{GATEWAY\_URL\}/api/stickers/file\-proxy/</span>{filePath}`;
             }
             return null;
         } catch (e) {
