@@ -19,7 +19,7 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
     @Autowired
     private JwtUtil jwtUtil;
 
-    private final List<String> publicRoutes = List.of("/api/auth/register", "/api/auth/login");
+    private final List<String> publicRoutes = List.of("/api/auth/register", "/api/auth/login", "/chat.html");
 
     public AuthenticationFilter() {
         super(Config.class);

@@ -1,5 +1,3 @@
-// 文件路径: api-gateway/src/main/java/com/example/apigateway/CorsConfig.java
-
 package com.example.apigateway;
 
 import org.springframework.context.annotation.Bean;
@@ -18,7 +16,7 @@ public class CorsConfig {
     @Order(Ordered.HIGHEST_PRECEDENCE) // <-- 3. 添加这个注解
     public CorsWebFilter corsWebFilter() {
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOriginPattern("*");
+        config.addAllowedOrigin("http://localhost:8888");
         config.setAllowCredentials(true);
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
