@@ -130,6 +130,14 @@
         .message-row:hover .reply-btn { opacity: 0.5; }
         .reply-btn:hover { opacity: 1 !important; }
         .message-bubble:has(.lottie-sticker) { background-color: transparent; padding: 0;}
+
+        /* @提及 消息样式 */
+        .mention { background-color: rgba(51, 144, 236, 0.3); color: #ffffff; font-weight: 600; padding: 1px 4px; border-radius: 4px;}
+        /* @提及 弹出菜单样式 */
+        #mentions-popup { position: absolute; bottom: 100%; /* 出现在输入框上方 */ left: 20px; background-color: var(--c-bg-lighter); border: 1px solid var(--c-bg-light);border-radius: 8px;max-height: 200px;overflow-y: auto;z-index: 20;}
+        .mention-item {display: flex;align-items: center;padding: 8px 12px;cursor: pointer;}
+        .mention-item:hover {background-color: var(--c-primary);}
+        .mention-item .avatar {width: 30px;height: 30px;font-size: 14px;margin-right: 10px;}
     </style>
 </head>
 <body>
@@ -227,14 +235,19 @@
                 </button>
             </div>
             <div id="messages-window" class="messages-window"></div>
+            <div id="mentions-popup" style="display: none;"></div>
             <div class="message-input-area">
                 <button class="input-button" onclick="triggerFileUpload()" title="上传文件">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256"><path d="M165.27,133.27a12,12,0,0,1-17,0L116,100.94V192a12,12,0,0,1-24,0V100.94L59.73,133.27a12,12,0,0,1-17-17l52-52a12,12,0,0,1,17,0l52,52A12,12,0,0,1,165.27,133.27ZM236,132a12,12,0,0,1-12,12H188a12,12,0,0,1,0-24h36V80H32v32H68a12,12,0,0,1,0,24H32a12,12,0,0,1-12-12V80A12,12,0,0,1,32,68H224a12,12,0,0,1,12,12Z"></path></svg>
                 </button>
 
-                <button id="sticker-btn" class="input-button" onclick="toggleStickerPanel()" title="发送贴纸">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm-32-48a12,12,0,1,1,12,12A12,12,0,0,1,96,168Zm80,0a12,12,0,1,1,12,12A12,12,0,0,1,176,168Zm-4-58.42a12,12,0,0,1,12-10.27,64.12,64.12,0,0,1,48,48,12,12,0,0,1-22.26,8.84,40,40,0,0,0-71.48,0,12,12,0,1,1-22.26-8.84,64.12,64.12,0,0,1,48-48A12,12,0,0,1,172,99.58Z"></path></svg>
-                </button>
+                <div id="emoji-wrapper" style="position: relative;">
+                    <button id="emoji-btn" class="input-button" title="选择表情">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm-32-48a12,12,0,1,1,12,12A12,12,0,0,1,96,168Zm80,0a12,12,0,1,1,12,12A12,12,0,0,1,176,168Zm-4-58.42a12,12,0,0,1,12-10.27,64.12,64.12,0,0,1,48,48,12,12,0,0,1-22.26,8.84,40,40,0,0,0-71.48,0,12,12,0,1,1-22.26-8.84,64.12,64.12,0,0,1,48-48A12,12,0,0,1,172,99.58Z"></path></svg>
+                    </button>
+                    <div id="emoji-panel" style="display: none; position: absolute; bottom: 50px; left: 0px; z-index: 10; width: 400px; max-height: 250px; overflow-y: auto; background-color: var(--c-bg-light); border: 1px solid var(--c-bg-lighter); border-radius: 8px; padding: 10px; box-shadow: 0 -5px 10px rgba(0,0,0,0.2); grid-template-columns: repeat(auto-fill, minmax(32px, 1fr)); gap: 8px;">
+                    </div>
+                </div>
 
                 <input type="file" id="file-input" style="display: none;" onchange="handleFileUpload(event)">
                 <input type="file" id="avatar-file-input" style="display: none;" onchange="handleAvatarUpload(event)" accept="image/*">
@@ -244,11 +257,10 @@
                 </button>
             </div>
         </div>
+
         <div id="welcome-screen">
             <svg width="80" height="80" fill="var(--c-bg-lighter)" viewBox="0 0 256 256"><path d="M128,24A104,104,0,0,0,36.18,176.88L24.83,210.93a16,16,0,0,0,20.24,20.24l34.05-11.35A104,104,0,1,0,128,24Zm0,192a88,88,0,0,1-45.15-13.16L38.3,221.7a8,8,0,0,1-10-10L46.84,167.15A88,88,0,1,1,128,216Z"></path></svg>
             <p style="color: var(--c-text-light); margin-top: 20px;">请从左侧选择一个会话开始聊天</p>
-        </div>
-        <div id="sticker-panel" style="display: none; position: absolute; bottom: 75px; left: 20px; background-color: var(--c-bg-light); border-radius: 8px; padding: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.5); max-height: 250px; overflow-y: auto;">
         </div>
     </div>
 </div>
@@ -258,15 +270,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
 <script>
     const GATEWAY_URL = 'http://localhost:8888';
-    var stompClient = null;
-    var currentUser = { id: null, username: null };
-    var currentChat = { id: null, type: null, name: null };
-    var userCache = {};
-    var statusUpdateInterval = null;
-    var activeSubscriptions = {};
-    var typingTimeout = null;
-    var searchDebounceTimeout = null;
-    var isCurrentUserGroupOwner = false;
+    let stompClient = null;
+    let currentUser = {id: null, username: null};
+    let currentChat = {id: null, type: null, name: null};
+    const userCache = {};
+    let statusUpdateInterval = null;
+    const activeSubscriptions = {};
+    let typingTimeout = null;
+    let searchDebounceTimeout = null;
+    let isCurrentUserGroupOwner = false;
+    let lastMessageTimestamp = null;
     // --- 辅助函数 ---
     function handleKeydown(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }
     function triggerFileUpload() { document.getElementById('file-input').click(); }
@@ -378,6 +391,7 @@
 
     // 【【请用这个完整的函数替换你现有的 selectConversation 函数】】
     async function selectConversation(element) {
+        lastMessageTimestamp = null;
         currentChat = {
             id: element.getAttribute('data-chat-id'),
             type: element.getAttribute('data-chat-type'),
@@ -502,8 +516,18 @@
     }
 
     function sendMessage() {
-        const content = document.getElementById('message-content').value;
+        let content = messageInput.value;
         if (!content.trim() || !currentChat.id || !stompClient) return;
+
+        content = content.replace(/@(\w+)/g, (match, username) => {
+            // 在userCache中查找这个username对应的用户
+            const user = Object.values(userCache).find(u => u.username === username);
+            if (user) {
+                // 如果找到了，就替换为带data-user-id的链接
+                return `<span class="mention" data-user-id="<span class="math-inline">\{user\.id\}"\>@</span>{username}</span>`;
+            }
+            return match; // 如果没找到，保持原样
+        });
 
         const payload = {
             senderId: currentUser.id,
@@ -604,42 +628,45 @@
         const row = document.createElement('div');
         row.id = `message-${message.id}`;
         row.setAttribute('data-status', message.status || 'SENT');
-        row.className = `message-row ${message.senderId == currentUser.id ? 'mine' : 'other'}`;
+        row.className = `message-row ${message.senderId === currentUser.id ? 'mine' : 'other'}`;
 
-        const time = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-
-        let statusIcon = '';
-        if (message.senderId == currentUser.id) {
-            statusIcon = `<span id="status-icon-${message.id}" class="message-status-icon sent" style="color: #4ade80;">✓</span>`;
+        // --- 优化时间显示逻辑 START ---
+        let time = '';
+        const currentTimestamp = new Date(message.timestamp);
+        // 检查是否需要显示时间戳
+        if (lastMessageTimestamp === null || (currentTimestamp - lastMessageTimestamp) > 5 * 60 * 1000) { // 超过5分钟
+            time = currentTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         }
+        lastMessageTimestamp = currentTimestamp; // 更新上一条消息的时间
+        // --- 优化时间显示逻辑 END ---
 
+
+        // --- 已读回执逻辑 START ---
+        let statusIcon = '';
+        if (message.senderId === currentUser.id) {
+            const iconId = `status-icon-${message.id}`;
+            // 根据消息状态决定初始图标
+            if (message.status === 'READ') {
+                statusIcon = `<span id="${iconId}" class="message-status-icon read" style="color: #4ade80;">✓✓</span>`; // 已读：绿色双勾
+            } else {
+                statusIcon = `<span id="${iconId}" class="message-status-icon sent" style="color: var(--c-text-light);">✓</span>`; // 已发送：灰色单勾
+            }
+        }
+        // --- 已读回执逻辑 END ---
+
+
+        // 最终渲染HTML
         row.innerHTML = `
     <div class="message-bubble">
         <div class="message-content">${message.content}</div>
         <div style="font-size:11px; text-align:right; margin-top:5px; color:var(--c-text-light);">
-            ${time}
-            ${statusIcon}
-        </div>
+            ${time}  ${statusIcon} </div>
     </div>`;
 
         msgWindow.appendChild(row);
 
-        // 在消息渲染后，查找并播放Lottie贴纸
-        const stickerContainers = row.querySelectorAll('.lottie-sticker');
-        stickerContainers.forEach(container => {
-            const url = container.getAttribute('data-sticker-url');
-            if (url) {
-                lottie.loadAnimation({
-                    container: container,
-                    renderer: 'svg',
-                    loop: true,
-                    autoplay: true,
-                    path: url
-                });
-            }
-        });
-
-        msgWindow.scrollTop = msgWindow.scrollHeight;
+        // 平滑滚动逻辑
+        msgWindow.scrollTo({ top: msgWindow.scrollHeight, behavior: 'smooth' });
     }
 
     function startStatusUpdates() {
@@ -1100,89 +1127,63 @@
             event.target.value = '';
         }
     }
+    document.addEventListener('DOMContentLoaded', () => {
+        // 确保在DOM加载完毕后获取元素
+        const emojiWrapper = document.getElementById('emoji-wrapper');
+        const emojiPanel = document.getElementById('emoji-panel');
 
-    async function loadAndRenderStickers() {
-        const panel = document.getElementById('sticker-panel');
-        if (panel.dataset.loaded === 'true') return;
+        // 检查元素是否存在，防止报错
+        if (!emojiWrapper || !emojiPanel) {
+            console.error('Emoji wrapper or panel not found!');
+            return;
+        }
 
-        panel.innerHTML = '正在加载贴纸...';
-        try {
-            const stickerSetName = "Animals";
-            // 【【修正URL拼接语法】】
-            const response = await fetchWithAuth(`${GATEWAY_URL}/api/stickers/set/${stickerSetName}`);
-            const data = await response.json();
+        let emojiLoaded = false;
+        let hidePanelTimeout;
 
-            if (data.ok) {
-                panel.innerHTML = '';
-                panel.dataset.loaded = 'true';
-                const stickers = data.result.stickers;
-                for (const sticker of stickers) {
-                    const stickerUrl = await getStickerFileUrl(sticker.file_id);
-                    if (stickerUrl) {
-                        const stickerContainer = document.createElement('div');
-                        stickerContainer.style.width = '80px';
-                        stickerContainer.style.height = '80px';
-                        stickerContainer.style.cursor = 'pointer';
-                        stickerContainer.style.margin = '5px';
-                        stickerContainer.onclick = () => sendSticker(stickerUrl);
-                        panel.appendChild(stickerContainer);
-
-                        lottie.loadAnimation({
-                            container: stickerContainer,
-                            renderer: 'svg',
-                            loop: true,
-                            autoplay: true,
-                            path: stickerUrl
-                        });
-                    }
-                }
-            } else {
-                panel.innerHTML = `加载失败: ${data.description}`;
+        async function loadEmojis() {
+            if (emojiLoaded) return;
+            emojiLoaded = true;
+            emojiPanel.innerHTML = '正在加载...';
+            try {
+                const response = await fetch(`${GATEWAY_URL}/api/emojis/list`);
+                if (!response.ok) throw new Error('获取表情列表失败');
+                const emojiFileList = await response.json();
+                emojiPanel.innerHTML = '';
+                emojiFileList.forEach(fileName => {
+                    const emojiImg = document.createElement('img');
+                    emojiImg.src = `/emojis/${fileName}`;
+                    emojiImg.style.width = '28px';
+                    emojiImg.style.height = '28px';
+                    emojiImg.style.cursor = 'pointer';
+                    emojiImg.title = fileName.split('.')[0];
+                    emojiImg.onclick = () => sendEmojiAsImage(fileName);
+                    emojiPanel.appendChild(emojiImg);
+                });
+            } catch (error) {
+                console.error("加载表情列表失败:", error);
+                emojiPanel.innerHTML = '加载失败';
             }
-        } catch (error) {
-            console.error("加载贴纸失败:", error);
-            panel.innerHTML = '加载贴纸失败，请检查后端代理或网络。';
         }
-    }
 
-    // 这是一个新的辅助函数，用于获取单个贴纸文件的真实URL
-    async function getStickerFileUrl(fileId) {
-        try {
-            // 1. 先通过我们的后端获取文件的元信息（包含file_path）
-            const fileInfoRes = await fetchWithAuth(`${GATEWAY_URL}/api/stickers/file/${fileId}`);
-            const fileInfoData = await fileInfoRes.json();
+        emojiWrapper.addEventListener('mouseenter', () => {
+            clearTimeout(hidePanelTimeout);
+            loadEmojis();
+            emojiPanel.style.display = 'grid';
+        });
 
-            if (fileInfoData.ok) {
-                const filePath = fileInfoData.result.file_path;
-                // 2.【【核心修改】】返回指向我们自己代理接口的URL，而不是Telegram的
-                return `<span class="math-inline">\{GATEWAY\_URL\}/api/stickers/file\-proxy/</span>{filePath}`;
-            }
-            return null;
-        } catch (e) {
-            console.error("获取贴纸文件路径失败:", e);
-            return null;
-        }
-    }
+        emojiWrapper.addEventListener('mouseleave', () => {
+            hidePanelTimeout = setTimeout(() => {
+                emojiPanel.style.display = 'none';
+            }, 300);
+        });
+    });
+    // ---- 最终版悬停逻辑 END ----
 
-    // 修改 toggleStickerPanel 函数
-    function toggleStickerPanel() {
-        const panel = document.getElementById('sticker-panel');
-        if (panel.style.display === 'none') {
-            panel.style.display = 'grid';
-            panel.style.gridTemplateColumns = 'repeat(auto-fill, minmax(80px, 1fr))';
-            loadAndRenderStickers(); // 调用加载函数
-        } else {
-            panel.style.display = 'none';
-        }
-    }
-
-    // 【【这是全新的 sendSticker 函数】】
-    function sendSticker(stickerUrl) {
+    // 发送表情的函数 (确保这个函数存在)
+    function sendEmojiAsImage(fileName) {
         if (!currentChat.id || !stompClient) return;
-
-        // 创建一个特殊的HTML内容，包含自定义属性，用于后续渲染
-        const content = `<div class="lottie-sticker" data-sticker-url="${stickerUrl}" style="width: 150px; height: 150px;"></div>`;
-
+        const content = `<img src="/emojis/${fileName}" style="width: 28px; height: 28px; vertical-align: middle;">`;
         const payload = {
             senderId: currentUser.id,
             content: content,
@@ -1190,9 +1191,80 @@
             groupId: currentChat.type === 'GROUP' ? currentChat.id : null,
             recipientId: currentChat.type === 'PRIVATE' ? currentChat.id : null,
         };
-
         stompClient.send("/app/chat", {}, JSON.stringify(payload));
-        document.getElementById('sticker-panel').style.display = 'none';
+        document.getElementById('emoji-panel').style.display = 'none';
+    }
+
+    const messageInput = document.getElementById('message-content');
+    const mentionsPopup = document.getElementById('mentions-popup');
+
+    messageInput.addEventListener('input', handleMentionInput);
+
+    async function handleMentionInput(event) {
+        const text = event.target.value;
+        const atIndex = text.lastIndexOf('@');
+
+        // 只有在群聊中，且光标在@符号后才触发
+        if (currentChat.type === 'GROUP' && atIndex !== -1) {
+            const query = text.substring(atIndex + 1);
+            try {
+                console.log('正在为群组ID获取成员, currentChat.id 的值是:', currentChat.id);
+                console.log('完整的 currentChat 对象是:', currentChat);
+                // 【核心修正】确保这里正确地构造了请求URL
+                const response = await fetchWithAuth(`<span class="math-inline">\{GATEWAY\_URL\}/api/groups/</span>{currentChat.id}/members/details`);
+
+                if (!response.ok) { // 检查请求是否成功
+                    throw new Error(`服务器错误: ${response.status}`);
+                }
+
+                const members = await response.json(); // 现在 members 一定是一个数组
+
+                // 根据输入过滤成员
+                const filteredMembers = members.filter(m =>
+                    m.username.toLowerCase().includes(query.toLowerCase())
+                );
+
+                renderMentionsPopup(filteredMembers, atIndex);
+
+            } catch (error) {
+                console.error('获取群成员失败:', error);
+                mentionsPopup.style.display = 'none';
+            }
+        } else {
+            mentionsPopup.style.display = 'none';
+        }
+    }
+
+    function renderMentionsPopup(members, atIndex) {
+        if (members.length === 0) {
+            mentionsPopup.style.display = 'none';
+            return;
+        }
+        mentionsPopup.innerHTML = '';
+        members.forEach(member => {
+            const item = document.createElement('div');
+            item.className = 'mention-item';
+            item.onclick = () => selectMention(member, atIndex);
+            // 假设userCache中有头像信息
+            const user = userCache[member.userId] || {};
+            let avatarHtml = `<div class="avatar">${member.username.charAt(0).toUpperCase()}</div>`;
+            if(user.avatarUrl) {
+                avatarHtml = `<img src="${user.avatarUrl}" class="avatar">`;
+            }
+            item.innerHTML = `<span class="math-inline">\{avatarHtml\}<span\></span>{member.username}</span>`;
+            mentionsPopup.appendChild(item);
+        });
+        mentionsPopup.style.display = 'block';
+    }
+    function selectMention(member, atIndex) {
+        const currentText = messageInput.value;
+        // 替换@query为@username
+        const newText = currentText.substring(0, atIndex) + `@${member.username} `;
+        messageInput.value = newText;
+        messageInput.focus();
+        mentionsPopup.style.display = 'none';
     }
 
 </script>
+</body>
+</html>

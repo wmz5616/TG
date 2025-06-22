@@ -30,6 +30,11 @@ spring:
           predicates:
             - Path=/api/users/**
 
+        - id: group-members-details-route
+          uri: lb://group-service
+          predicates:
+            - Path=/api/groups/{groupId}/members/details
+
         - id: group-service-route
           uri: lb://group-service
           predicates:
@@ -59,5 +64,19 @@ spring:
           uri: lb://message-service
           predicates:
             - Path=/api/stickers/**
+
+        - id: self-hosted-emojis-route
+          uri: lb://message-service
+          predicates:
+            - Path=/emojis/**
+
+        - id: emoji-api-list-route
+          uri: lb://message-service
+          predicates:
+            - Path=/api/emojis/list
 jwt:
   secret: eW91ci12ZXJ5LWxvbmctYW5kLXNlY3VyZS1zZWNyZXQta2V5LXRoYXQtbm8tb25lLWtub3dzLTEyMzQ1
+
+filters:
+  # 这个过滤器会自动为所有匹配的请求加上您的API Key作为参数
+  - AddRequestParameter=access_key, de742e140fa1c198fbf242493bc76bd852a0626c

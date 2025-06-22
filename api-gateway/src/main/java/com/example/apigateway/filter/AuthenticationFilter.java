@@ -23,7 +23,8 @@ public class AuthenticationFilter extends AbstractGatewayFilterFactory<Authentic
             "/api/auth/register",
             "/api/auth/login",
             "/chat.html",
-            "/api/stickers/file-proxy" // <-- 新增这一行，允许对贴纸代理的匿名访问
+            "/api/emojis/list",
+            "/emojis/"
     );
 
     public AuthenticationFilter() {
