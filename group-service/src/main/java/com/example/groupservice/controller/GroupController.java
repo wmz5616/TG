@@ -15,14 +15,10 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/groups")
 public class GroupController {
-
     @Autowired
     private GroupService groupService;
-
     @Autowired
     private GroupRepository groupRepository;
-
-    // ... (您其他的旧接口，例如 createNewGroup, getGroupsForUser 等，保持不变) ...
     @PostMapping("/create")
     public ResponseEntity<Group> createNewGroup(
             @RequestBody CreateGroupRequest request,
@@ -31,17 +27,14 @@ public class GroupController {
         Group createdGroup = groupService.createGroup(request, userId);
         return new ResponseEntity<>(createdGroup, HttpStatus.CREATED);
     }
-
     @GetMapping("/user/{userId}")
     public List<Group> getGroupsForUser(@PathVariable Long userId) {
         return groupService.getGroupsForUser(userId);
     }
-
     @GetMapping("/{groupId}/members/{userId}/exists")
     public boolean isUserMember(@PathVariable Long groupId, @PathVariable Long userId) {
         return groupService.isUserMemberOfGroup(groupId, userId);
     }
-
     @PostMapping("/{groupId}/members")
     public ResponseEntity<?> addMember(
             @PathVariable Long groupId,
@@ -56,13 +49,11 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
     }
-
     @GetMapping("/{groupId}/members")
     public ResponseEntity<List<Long>> getGroupMembers(@PathVariable Long groupId) {
         List<Long> memberIds = groupService.getMemberIdsByGroupId(groupId);
         return ResponseEntity.ok(memberIds);
     }
-
     @DeleteMapping("/{groupId}/members/{userId}")
     public ResponseEntity<?> removeMember(
             @PathVariable Long groupId,
@@ -79,19 +70,24 @@ public class GroupController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
         }
     }
-
     @GetMapping("/{groupId}")
     public ResponseEntity<Group> getGroupById(@PathVariable Long groupId) {
         return groupRepository.findById(groupId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
-
-
-    // 【修正】将这个新接口移动到 GroupController 类的大括号内部
     @GetMapping("/{groupId}/members/details")
     public ResponseEntity<List<GroupMemberDTO>> getGroupMembersDetails(@PathVariable Long groupId) {
         List<GroupMemberDTO> members = groupService.getGroupMembersWithDetails(groupId);
         return ResponseEntity.ok(members);
+    }
+    @GetMapping("/user/{userId}/ids")
+    public List<Long> getGroupIdsForUser(@PathVariable Long userId) {
+        return groupService.getGroupIdsByUserId(userId);
+    }
+    // 【【新增接口2】】 供 message-service 调用
+    @GetMapping("/batch")
+    public List<Group> getGroupsByIds(@RequestParam("ids") List<Long> ids) {
+        return groupService.getGroupsByIds(ids);
     }
 }

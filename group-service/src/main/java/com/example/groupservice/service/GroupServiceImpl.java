@@ -15,18 +15,12 @@ import java.util.stream.Collectors;
 
 @Service
 public class GroupServiceImpl implements GroupService {
-
     @Autowired
     private GroupRepository groupRepository;
-
     @Autowired
     private GroupMemberRepository groupMemberRepository;
-
     @Autowired // 【修正】注入 UserClient，这样我们才能调用其他服务
     private UserClient userClient;
-
-    // ... (您其他的旧方法，例如 createGroup, getGroupsForUser 等，保持不变) ...
-
     @Override
     @Transactional
     public Group createGroup(CreateGroupRequest request, Long ownerId) {
@@ -41,7 +35,6 @@ public class GroupServiceImpl implements GroupService {
         groupMemberRepository.save(ownerAsMember);
         return savedGroup;
     }
-
     @Override
     public List<Group> getGroupsForUser(Long userId) {
         List<GroupMember> memberships = groupMemberRepository.findByUserId(userId);
@@ -53,12 +46,10 @@ public class GroupServiceImpl implements GroupService {
         }
         return groupRepository.findAllById(groupIds);
     }
-
     @Override
     public boolean isUserMemberOfGroup(Long groupId, Long userId) {
         return groupMemberRepository.existsByGroupIdAndUserId(groupId, userId);
     }
-
     @Override
     @Transactional
     public void addMember(Long groupId, Long userIdToAdd, Long inviterId) {
@@ -78,7 +69,6 @@ public class GroupServiceImpl implements GroupService {
         groupMemberRepository.save(newMember);
         System.out.println("Successfully added user " + userIdToAdd + " to group " + groupId);
     }
-
     @Override
     public List<Long> getMemberIdsByGroupId(Long groupId) {
         List<GroupMember> members = groupMemberRepository.findByGroupId(groupId);
@@ -86,7 +76,6 @@ public class GroupServiceImpl implements GroupService {
                 .map(GroupMember::getUserId)
                 .collect(Collectors.toList());
     }
-
     @Override
     @Transactional
     public void removeMember(Long groupId, Long userIdToRemove, Long removerId) {
@@ -101,9 +90,6 @@ public class GroupServiceImpl implements GroupService {
         groupMemberRepository.deleteByGroupIdAndUserId(groupId, userIdToRemove);
         System.out.println("Successfully removed user " + userIdToRemove + " from group " + groupId);
     }
-
-
-    // 【修正】为新方法加上 @Override 注解
     @Override
     public List<GroupMemberDTO> getGroupMembersWithDetails(Long groupId) {
         // 1. 获取成员ID列表 (调用已有的方法)
@@ -113,5 +99,18 @@ public class GroupServiceImpl implements GroupService {
         }
         // 2. 通过 Feign Client 批量调用 user-service 获取用户信息
         return userClient.getUsersByIds(memberIds);
+    }
+    @Override
+    public List<Long> getGroupIdsByUserId(Long userId) {
+        return groupMemberRepository.findByUserId(userId).stream()
+                .map(GroupMember::getGroupId)
+                .collect(Collectors.toList());
+    }
+    @Override
+    public List<Group> getGroupsByIds(List<Long> groupIds) {
+        if (groupIds == null || groupIds.isEmpty()) {
+            return List.of();
+        }
+        return groupRepository.findAllById(groupIds);
     }
 }

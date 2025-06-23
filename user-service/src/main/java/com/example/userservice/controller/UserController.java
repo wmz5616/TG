@@ -8,9 +8,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import com.example.userservice.dto.ProfileUpdateRequest; // 导入
-
+import java.util.Map;
+import java.util.HashMap;
+import java.util.stream.Collectors;
 import java.util.Collections;
 import java.util.List;
+import com.example.userservice.dto.UserDTO;
 
 @RestController
 @RequestMapping("/api/users")
@@ -31,26 +34,24 @@ public class UserController {
             @PathVariable Long id,
             // 1. 使用 @RequestHeader注解，从请求头中获取由网关放入的用户名
             @RequestHeader("X-Authenticated-Username") String authenticatedUsername) {
-
         User userInDb = userService.getUserById(id);
-
         // 如果要查询的用户不存在，返回 404
         if (userInDb == null) {
             return ResponseEntity.notFound().build();
         }
-
-        // 2. 【【授权核心】】检查数据库中用户的名字，是否和当前通过JWT认证的用户名一致
-        if (!userInDb.getCustomId().equals(authenticatedUsername)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-
         return ResponseEntity.ok(userInDb);
     }
 
-    // 这个批量查询接口我们暂时保留，因为聊天应用通常需要查询其他用户信息
     @GetMapping("/batch")
-    public List<User> getUsersByIds(@RequestParam List<Long> ids) {
-        return userService.getUsersByIds(ids);
+    public List<UserDTO> getUsersByIds(@RequestParam List<Long> ids) {
+        List<User> users = userService.getUsersByIds(ids);
+        return users.stream().map(user -> {
+            UserDTO dto = new UserDTO();
+            dto.setId(user.getId());
+            dto.setUsername(user.getUsername());
+            dto.setAvatarUrl(user.getAvatarUrl());
+            return dto;
+        }).collect(Collectors.toList());
     }
 
     // 【【核心修改】】

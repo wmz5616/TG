@@ -8,7 +8,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class GroupMemberDTO {
-    private Long userId;
+    private Long id;
     private String username;
     // 如果需要，未来还可以添加头像等信息
 }

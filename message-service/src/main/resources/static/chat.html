@@ -56,34 +56,131 @@
         .avatar { width: 50px; height: 50px; border-radius: 50%; background-color: var(--c-primary); display: flex; align-items: center; justify-content: center; font-weight: 600; object-fit: cover; }
         .status-dot { position: absolute; bottom: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--c-bg-light); background-color: var(--c-offline); }
         .status-dot.online { background-color: var(--c-online); }
-        .conversation-details { flex-grow: 1; overflow: hidden; }
+        .conversation-details { flex-grow: 1; overflow: hidden; padding-right: 10px; }
+        .conversation-meta { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; color: var(--c-text-light); }
+        .unread-badge { background-color: var(--c-primary); color: white; font-size: 11px;font-weight: 600;min-width: 20px;height: 20px;border-radius: 10px;display: flex;align-items: center;justify-content: center;padding: 0 6px;margin-top: 6px; }
         .conversation-name { font-weight: 600; font-size: 15px; }
         .last-message-content { font-size: 14px; color: var(--c-text-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 
         /* 聊天区 */
-        #chat-area { display: none; flex-grow: 1; flex-direction: column; height: 100%; }
+        #chat-area { display: none; flex-grow: 1; flex-direction: column; height: 100%; position: relative; }
         .chat-header { display: flex; align-items: center; padding: 10px 20px; background-color: var(--c-bg-light); border-bottom: 1px solid var(--c-bg-lighter); flex-shrink: 0; }
         #chat-header-avatar { width: 40px; height: 40px; margin-right: 15px; }
         #chat-status { font-size: 13px; color: var(--c-primary-light); height: 18px; transition: color 0.3s ease; }
-        .messages-window { flex-grow: 1; padding: 20px; overflow-y: auto; }
-        .message-row { display: flex; margin-bottom: 15px; }
+        .messages-window { flex-grow: 1; padding: 20px; overflow-y: auto; background-image: url('https://i.pinimg.com/736x/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg'); background-size: contain; }
+        .message-row { display: flex; margin-bottom: 4px; }
         .message-row.mine { justify-content: flex-end; }
-        .message-bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; line-height: 1.4; word-break: break-word; }
-        .message-row.mine .message-bubble { background-color: var(--c-sent-bubble); }
-        .message-row.other .message-bubble { background-color: var(--c-received-bubble); }
+        .message-bubble { max-width: 65%; padding: 8px 12px; border-radius: 18px; line-height: 1.45; word-break: break-word; display: flex; flex-direction: column; }
+        .message-row.mine .message-bubble { background-color: var(--c-sent-bubble); border-bottom-right-radius: 4px; }
+        .message-row.other .message-bubble { background-color: var(--c-received-bubble); border-bottom-left-radius: 4px; }
         .message-content img { max-width: 100%; border-radius: 10px; margin-top: 5px; cursor: pointer; }
         .message-input-area { display: flex; align-items: center; padding: 10px 20px; background-color: var(--c-bg-light); flex-shrink: 0; }
-        #message-content { flex-grow: 1; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 20px; padding: 12px 20px; color: var(--c-text); font-size: 15px; }
+        #message-content { flex-grow: 1; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 20px; padding: 12px 20px; color: var(--c-text); font-size: 15px; text-align: left; }
         #message-content:focus { outline: none; border-color: var(--c-primary); }
         .input-button { background: none; border: none; cursor: pointer; padding: 10px; }
         .input-button svg { width: 24px; height: 24px; color: var(--c-text-light); }
         .send-button { background-color: var(--c-primary); border: none; width: 45px; height: 45px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; margin-left: 10px;}
+        .message-timestamp { font-size: 11px; color: rgba(255, 255, 255, 0.6); margin-top: 5px; align-self: flex-end; display: flex; align-items: center; }
 
         /* 弹窗与遮罩层 */
         .login-overlay, .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1001; }
-        .login-box, .modal-box { background-color: var(--c-bg-light); padding: 40px; border-radius: 12px; text-align: center; }
-        .login-box input { display: block; margin: 0 auto 15px auto; background-color: var(--c-bg); border: 1px solid var(--c-bg-lighter); border-radius: 8px; padding: 12px; width: 220px; color: var(--c-text); }
-        .login-box button { background-color: var(--c-primary); border: none; border-radius: 8px; padding: 12px 20px; width: 220px; color: white; font-weight: 600; cursor: pointer; }
+        .login-box {
+            background-color: var(--c-bg-light);
+            padding: 40px 35px;
+            border-radius: 16px; /* 圆角更明显一些 */
+            text-align: left; /* 【核心修改】文字左对齐，更专业 */
+            width: 380px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5); /* 增强阴影 */
+            border: 1px solid var(--c-bg-lighter);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        /* 鼠标悬停时，让卡片轻微上浮，增加交互感 */
+        .login-box:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 标题样式 */
+        .login-box h3 {
+            margin-bottom: 15px; /* 减小一点标题和第一个输入框的间距 */
+            font-weight: 600;
+            font-size: 26px;
+            color: var(--c-text);
+            text-align: center; /* 标题居中 */
+        }
+
+        /* 【新增】为输入框增加一个外层标签，用于显示 "ID号", "密码" 文字 */
+        .login-box .input-group {
+            margin-bottom: 22px;
+        }
+
+        .login-box .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--c-text-light);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* 输入框本身的新样式 */
+        .login-box input {
+            display: block;
+            width: 100%;
+            margin: 0; /* 移除旧的 margin */
+            background-color: var(--c-bg);
+            border: 1px solid var(--c-bg-lighter);
+            border-radius: 8px;
+            padding: 14px;
+            color: var(--c-text);
+            font-size: 15px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        /* 输入框聚焦（正在输入）时的样式 */
+        .login-box input:focus {
+            outline: none;
+            border-color: var(--c-primary);
+            box-shadow: 0 0 0 3px rgba(51, 144, 236, 0.25); /* 增加一个柔和的发光效果 */
+        }
+
+        /* 按钮的新样式 */
+        .login-box button {
+            width: 100%;
+            border: none;
+            border-radius: 8px;
+            padding: 14px 20px;
+            background: var(--c-primary);
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(51, 144, 236, 0.2);
+        }
+
+        /* 按钮的鼠标悬停效果 */
+        .login-box button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(51, 144, 236, 0.3);
+            background: #459cff; /* 颜色变亮一点 */
+        }
+
+        /* “立即注册/登录”链接的样式 */
+        .login-box p {
+            text-align: center; /* 让这段文字居中 */
+        }
+
+        .login-box p a {
+            color: var(--c-primary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .login-box p a:hover {
+            text-decoration: underline;
+        }
 
         #create-group-modal, #profile-modal { display: none; }
         .modal-box { width: 400px; text-align: left; }
@@ -119,8 +216,8 @@
         .messages-window::-webkit-scrollbar-thumb, .conversation-list::-webkit-scrollbar-thumb, .search-results::-webkit-scrollbar-thumb { background-color: transparent; border-radius: 3px; }
         .messages-window:hover::-webkit-scrollbar-thumb, .conversation-list:hover::-webkit-scrollbar-thumb, .search-results:hover::-webkit-scrollbar-thumb { background-color: rgba(255, 255, 255, 0.25); }
 
-        .message-status-icon { margin-left: 5px; font-weight: bold; color: var(--c-text-light); /* 默认灰色 */}
-        .message-status-icon.read { color: var(--c-primary); /* 已读后变为蓝色 */}
+        .message-status-icon { margin-left: 4px; font-weight: bold; color:rgba(255, 255, 255, 0.6); }
+        .message-status-icon.read { color: var(--c-online); /* 已读后变为蓝色 */}
         .message-image-container { display: block; max-width: 300px; max-height: 400px; border-radius: 12px; overflow: hidden; cursor: pointer; background-color: var(--c-bg); aspect-ratio: 4 / 3; }
         .message-image-container img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
         .message-bubble:has(.message-image-container) { padding: 0; background-color: transparent; }
@@ -134,20 +231,82 @@
         /* @提及 消息样式 */
         .mention { background-color: rgba(51, 144, 236, 0.3); color: #ffffff; font-weight: 600; padding: 1px 4px; border-radius: 4px;}
         /* @提及 弹出菜单样式 */
-        #mentions-popup { position: absolute; bottom: 100%; /* 出现在输入框上方 */ left: 20px; background-color: var(--c-bg-lighter); border: 1px solid var(--c-bg-light);border-radius: 8px;max-height: 200px;overflow-y: auto;z-index: 20;}
+        #mentions-popup { position: absolute; bottom: 65px; left: 20px; width: 300px; background-color: var(--c-bg-lighter); border: 1px solid var(--c-bg-light);border-radius: 8px;max-height: 200px;overflow-y: auto;z-index: 20;}
         .mention-item {display: flex;align-items: center;padding: 8px 12px;cursor: pointer;}
         .mention-item:hover {background-color: var(--c-primary);}
         .mention-item .avatar {width: 30px;height: 30px;font-size: 14px;margin-right: 10px;}
+
+        .theme-switch {position: relative;display: inline-block;width: 50px; /* 开关宽度 */height: 28px; /* 开关高度 */flex-shrink: 0;cursor: pointer;}
+        .theme-switch input {opacity: 0;width: 0;height: 0;}
+        .slider {position: absolute;top: 0;left: 0;right: 0;bottom: 0;background-color: var(--c-bg-lighter); /* 关闭时的背景色 */transition: .4s;}
+        .slider:before {position: absolute;content: "";height: 20px; /* 圆点高度 */width: 20px; /* 圆点宽度 */left: 4px;bottom: 4px;background-color: white; /* 圆点颜色 */transition: .4s;}
+        input:checked + .slider {background-color: var(--c-primary); /* 开启时的背景色 */}
+        input:checked + .slider:before {transform: translateX(22px); /* 圆点移动距离 */}
+        .slider.round {border-radius: 34px;}
+        .slider.round:before {border-radius: 50%;}
+        .nav-user-info {flex-grow: 1; /* 让这个元素占据所有剩余空间，把开关推到最右边 */}
+
+
+        body.light-mode {--c-bg: #ffffff;--c-bg-light: #f0f2f5;--c-bg-lighter: #e4e6eb;--c-text: #050505;--c-text-light: #65676b;--c-sent-bubble: #0084ff;--c-received-bubble: #e4e6eb;--c-primary: #0084ff;}
+        body.light-mode .message-row.other .message-bubble {color: #050505;}
+
+        .profile-box {width: 380px;background-color: var(--c-bg-light);border-radius: 12px;overflow: hidden; /* 隐藏超出圆角的部分 */box-shadow: 0 10px 40px rgba(0,0,0,0.5);transform: scale(0.95);opacity: 0;transition: transform 0.3s ease, opacity 0.3s ease;}
+        #user-profile-modal.visible .profile-box {transform: scale(1);opacity: 1;}
+        .profile-header {height: 120px;background: linear-gradient(45deg, var(--c-primary), #5f99e4);}
+        .profile-avatar-container {margin-top: -60px; /* 让头像一半在头部，一半在身体 */text-align: center;}
+        #profile-page-avatar {width: 100px;height: 100px;border-radius: 50%;border: 4px solid var(--c-bg-light);object-fit: cover;}
+        .profile-body {padding: 20px 30px 30px;text-align: center;}
+        #profile-page-username {font-size: 24px;font-weight: 600;margin-bottom: 5px;}
+        .profile-id {color: var(--c-text-light);font-size: 15px;margin-bottom: 15px;}
+        .profile-bio {font-size: 15px;line-height: 1.5;color: var(--c-text);margin-bottom: 25px;min-height: 45px; /* 至少给简介一个高度 */}
+        .profile-message-btn {width: 100%;padding: 12px;border: none;border-radius: 8px;background-color: var(--c-primary);color: white;font-size: 16px;font-weight: 600;cursor: pointer;transition: background-color 0.2s;}
+        .profile-message-btn:hover {background-color: #459cff;}
     </style>
 </head>
 <body>
 <div id="login-overlay" class="login-overlay">
     <div class="login-box">
         <h3>登录 Mini-Telegram</h3>
-        <p id="login-error" style="color: #f87171; height: 20px;"></p>
-        <input type="text" id="login-id" placeholder="ID号">
-        <input type="password" id="login-password" placeholder="密码" onkeydown="if(event.key === 'Enter') login()">
-        <button onclick="login()">登 录</button>
+        <p id="login-error" style="color: #f87171; height: 20px; text-align: center;"></p>
+
+        <div class="input-group">
+            <label for="login-id">ID号</label>
+            <input type="text" id="login-id" placeholder="请输入你的ID号">
+        </div>
+
+        <div class="input-group">
+            <label for="login-password">密码</label>
+            <input type="password" id="login-password" placeholder="请输入你的密码" onkeydown="if(event.key === 'Enter') login()">
+        </div>
+
+        <button onclick="login()" style="margin-top: 10px;">登 录</button>
+
+        <p style="margin-top: 25px; font-size: 14px; color: var(--c-text-light);">
+            没有账户？ <a href="#" onclick="showRegisterForm(event)">立即注册</a>
+        </p>
+    </div>
+</div>
+
+<div id="register-overlay" class="login-overlay" style="display: none;">
+    <div class="login-box">
+        <h3>注册新用户</h3>
+        <p id="register-error" style="color: #f87171; height: 20px; text-align: center;"></p>
+        <div class="input-group">
+            <label for="register-username">昵称</label>
+            <input type="text" id="register-username" placeholder="个性昵称">
+        </div>
+        <div class="input-group">
+            <label for="register-id">ID号</label>
+            <input type="text" id="register-id" placeholder="用于登录的唯一ID">
+        </div>
+        <div class="input-group">
+            <label for="register-password">密码</label>
+            <input type="password" id="register-password" placeholder="请输入密码">
+        </div>
+        <button onclick="register()" style="margin-top: 10px;">注 册</button>
+        <p style="margin-top: 25px; font-size: 14px; color: var(--c-text-light);">
+            已有账户？ <a href="#" onclick="showLoginForm(event)">立即登录</a>
+        </p>
     </div>
 </div>
 
@@ -185,7 +344,14 @@
 <div id="nav-menu" class="nav-menu">
     <div class="nav-menu-header" onclick="openProfileModal()">
         <div id="nav-avatar" class="avatar"></div>
-        <h4 id="nav-username"></h4>
+        <div class="nav-user-info">
+            <h4 id="nav-username"></h4>
+            <small id="nav-user-id" style="color: rgba(255,255,255,0.7); font-weight: 400;"></small>
+        </div>
+        <label class="theme-switch" for="theme-checkbox" title="切换深色/浅色模式" onclick="event.stopPropagation()">
+            <input type="checkbox" id="theme-checkbox">
+            <div class="slider round"></div>
+        </label>
     </div>
     <ul class="nav-menu-list">
         <li onclick="openCreateGroupModal()">
@@ -265,10 +431,47 @@
     </div>
 </div>
 
+<div id="user-profile-modal" class="modal-overlay" style="display: none;" onclick="closeUserProfileModal()">
+    <div class="profile-box" onclick="event.stopPropagation()">
+        <div class="profile-header">
+        </div>
+        <div class="profile-avatar-container">
+            <img id="profile-page-avatar" src="" alt="avatar">
+        </div>
+        <div class="profile-body">
+            <h3 id="profile-page-username"></h3>
+            <p class="profile-id" id="profile-page-custom-id"></p>
+            <p class="profile-bio" id="profile-page-bio"></p>
+            <button class="profile-message-btn" onclick="startChatFromProfile()">发消息</button>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1.6.1/dist/sockjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
 <script>
+    // 立即执行函数，用于初始化主题
+    (function() {
+        const themeCheckbox = document.getElementById('theme-checkbox');
+        const body = document.body;
+        // 1. 页面加载时，检查本地存储，应用之前的主题
+        const currentTheme = localStorage.getItem('theme');
+        if (currentTheme === 'light') {
+            body.classList.add('light-mode');
+            themeCheckbox.checked = true;
+        }
+        // 2. 为开关添加点击事件
+        themeCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                body.classList.add('light-mode');
+                localStorage.setItem('theme', 'light'); // 保存偏好到本地
+            } else {
+                body.classList.remove('light-mode');
+                localStorage.setItem('theme', 'dark'); // 保存偏好到本地
+            }
+        });
+    })();
     const GATEWAY_URL = 'http://localhost:8888';
     let stompClient = null;
     let currentUser = {id: null, username: null};
@@ -280,6 +483,7 @@
     let searchDebounceTimeout = null;
     let isCurrentUserGroupOwner = false;
     let lastMessageTimestamp = null;
+    let viewingProfileUserId = null;
     // --- 辅助函数 ---
     function handleKeydown(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } }
     function triggerFileUpload() { document.getElementById('file-input').click(); }
@@ -301,6 +505,62 @@
         return fetch(url, finalOptions);
     }
 
+    function showRegisterForm(event) {
+        event.preventDefault(); // 阻止 a 标签的默认跳转行为
+        document.getElementById('login-overlay').style.display = 'none';
+        document.getElementById('register-overlay').style.display = 'flex';
+    }
+
+    function showLoginForm(event) {
+        event.preventDefault();
+        document.getElementById('register-overlay').style.display = 'none';
+        document.getElementById('login-overlay').style.display = 'flex';
+    }
+
+    async function register() {
+        // 1. 获取注册表单中的所有输入值
+        const username = document.getElementById('register-username').value.trim();
+        const customId = document.getElementById('register-id').value.trim();
+        const password = document.getElementById('register-password').value.trim();
+        const errorEl = document.getElementById('register-error');
+
+        // 【【核心修改】】安全地获取 email 的值
+        const emailInput = document.getElementById('register-email');
+        // 如果 email 输入框存在，就获取它的值；如果不存在，则默认为一个空字符串
+        const email = emailInput ? emailInput.value.trim() : "";
+
+        // 2. 简单的前端校验
+        if (!username || !customId || !password) {
+            errorEl.innerText = '昵称、ID号和密码不能为空！';
+            return;
+        }
+        errorEl.innerText = '';
+
+        // 3. 构造发送到后端的请求体
+        const registrationRequest = { username, customId, password, email };
+
+        try {
+            // 4. 调用后端的注册接口
+            const response = await fetch(`${GATEWAY_URL}/api/auth/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(registrationRequest)
+            });
+
+            // 5. 处理后端的响应
+            if (response.ok) {
+                alert('注册成功！现在可以用你的ID号登录了。');
+                showLoginForm(new Event('click')); // 注册成功后自动跳转回登录界面
+            } else {
+                // 如果后端返回错误（比如ID已存在），显示错误信息
+                const errorMessage = await response.text();
+                errorEl.innerText = errorMessage;
+            }
+        } catch (error) {
+            console.error('注册时发生网络错误:', error);
+            errorEl.innerText = '发生网络错误，请稍后再试。';
+        }
+    }
     // --- 核心认证与连接 ---
     async function login() {
         const username = document.getElementById('login-id').value.trim();
@@ -369,24 +629,20 @@
     // --- 业务功能 ---
     async function loadAndRenderConversations() {
         try {
-            const res = await fetchWithAuth(`${GATEWAY_URL}/api/groups/user/${currentUser.id}`);
-            const groups = await res.json();
-            const privateRes = await fetchWithAuth(`${GATEWAY_URL}/api/messages/conversations/private/${currentUser.id}`);
-            const partnerIds = await privateRes.json();
-            let convos = [];
-            groups.forEach(g => convos.push({ id: g.id, type: 'GROUP', name: g.name }));
-            const userIdsToFetch = [...new Set(partnerIds)].filter(id => !userCache[id]);
-            if (userIdsToFetch.length > 0) {
-                const usersRes = await fetchWithAuth(`${GATEWAY_URL}/api/users/batch?ids=${userIdsToFetch.join(',')}`);
-                const users = await usersRes.json();
-                users.forEach(u => { userCache[u.id] = u; });
+            // 直接调用我们全新的、聚合了所有信息的接口
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/messages/conversations`);
+            if (!response.ok) {
+                throw new Error(`获取会话列表失败: ${response.status}`);
             }
-            partnerIds.forEach(id => {
-                if(userCache[id]) convos.push({ id, type: 'PRIVATE', name: userCache[id].username });
-            });
-            renderConversationList(convos);
+            const conversations = await response.json();
+
+            // 将获取到的丰富数据直接交给渲染函数
+            renderConversationList(conversations);
             startStatusUpdates();
-        } catch (e) { console.error('获取会话列表失败:', e); }
+
+        } catch (e) {
+            console.error('获取会话列表失败:', e);
+        }
     }
 
     // 【【请用这个完整的函数替换你现有的 selectConversation 函数】】
@@ -605,20 +861,64 @@
 
     function renderConversationList(conversations) {
         const list = document.getElementById('conversation-list');
-        list.innerHTML = '';
+        list.innerHTML = ''; // 清空旧列表
+
+        if (!conversations || conversations.length === 0) {
+            list.innerHTML = '<p style="text-align: center; color: var(--c-text-light); padding: 50px;">暂无会话，找个朋友聊聊吧</p>';
+            return;
+        }
+
         conversations.forEach(c => {
             const item = document.createElement('div');
             item.className = 'conversation-item';
-            if (c.type === 'PRIVATE') item.id = `convo-user-${c.id}`;
-            item.setAttribute('data-chat-id', c.id);
+            if (c.type === 'PRIVATE') {
+                item.id = `convo-user-${c.conversationId}`;
+            }
+            item.setAttribute('data-chat-id', c.conversationId);
             item.setAttribute('data-chat-type', c.type);
             item.setAttribute('data-chat-name', c.name);
-            item.onclick = () => selectConversation(item);
-            let avatarHtml = `<div class="avatar">${c.name.charAt(0).toUpperCase()}</div>`;
-            if(c.type === 'PRIVATE' && userCache[c.id] && userCache[c.id].avatarUrl){
-                avatarHtml = `<img class="avatar" src="${userCache[c.id].avatarUrl}" alt="${c.name.charAt(0)}">`;
+
+            // 使用真实的头像，如果没有则使用文字头像
+            let avatarHtml = `<div class="avatar">${(c.name || '?').charAt(0).toUpperCase()}</div>`;
+            if (c.avatarUrl) {
+                avatarHtml = `<img class="avatar" src="${c.avatarUrl}" alt="${(c.name || '?').charAt(0)}">`;
             }
-            item.innerHTML = `<div class="avatar-container">${avatarHtml}${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}</div><div class="conversation-details"><span class="conversation-name">${c.name}</span><div class="last-message-content">${c.type === 'GROUP' ? '群聊' : '私聊'}</div></div>`;
+
+            // 使用真实的最后一条消息时间和内容
+            let lastMessageTime = '';
+            if (c.lastMessageTimestamp) {
+                lastMessageTime = new Date(c.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+
+            const lastMessageContent = c.lastMessageContent || (c.type === 'GROUP' ? '群聊' : '私聊');
+            const unreadCount = c.unreadCount || 0;
+
+            // 渲染列表项的 HTML
+            item.innerHTML = `
+            <div class="avatar-container">
+                ${avatarHtml}
+                ${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}
+            </div>
+            <div class="conversation-details">
+                <span class="conversation-name">${c.name}</span>
+                <div class="last-message-content">${lastMessageContent}</div>
+            </div>
+            <div class="conversation-meta">
+                <span>${lastMessageTime}</span>
+                ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+            </div>
+        `;
+
+            // 绑定事件
+            const avatarContainer = item.querySelector('.avatar-container');
+            if (avatarContainer) {
+                avatarContainer.onclick = (event) => {
+                    event.stopPropagation();
+                    showUserProfile(c.conversationId);
+                };
+            }
+            item.onclick = () => selectConversation(item);
+
             list.appendChild(item);
         });
     }
@@ -655,13 +955,14 @@
         // --- 已读回执逻辑 END ---
 
 
-        // 最终渲染HTML
         row.innerHTML = `
-    <div class="message-bubble">
-        <div class="message-content">${message.content}</div>
-        <div style="font-size:11px; text-align:right; margin-top:5px; color:var(--c-text-light);">
-            ${time}  ${statusIcon} </div>
-    </div>`;
+<div class="message-bubble">
+    <div class="message-content">${message.content}</div>
+    <div class="message-timestamp">
+        <span>${time}</span>
+        ${statusIcon}
+    </div>
+</div>`;
 
         msgWindow.appendChild(row);
 
@@ -1055,6 +1356,10 @@
                     }
 
                     memberItem.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${user.username}</div>${removeBtnHtml}`;
+                    memberItem.querySelector('.avatar').onclick = (event) => {
+                        event.stopPropagation();
+                        showUserProfile(user.id);
+                    };
                     listContainer.appendChild(memberItem);
                 });
             }
@@ -1211,7 +1516,7 @@
                 console.log('正在为群组ID获取成员, currentChat.id 的值是:', currentChat.id);
                 console.log('完整的 currentChat 对象是:', currentChat);
                 // 【核心修正】确保这里正确地构造了请求URL
-                const response = await fetchWithAuth(`<span class="math-inline">\{GATEWAY\_URL\}/api/groups/</span>{currentChat.id}/members/details`);
+                const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members/details`);
 
                 if (!response.ok) { // 检查请求是否成功
                     throw new Error(`服务器错误: ${response.status}`);
@@ -1246,12 +1551,12 @@
             item.className = 'mention-item';
             item.onclick = () => selectMention(member, atIndex);
             // 假设userCache中有头像信息
-            const user = userCache[member.userId] || {};
+            const user = userCache[member.id] || {};
             let avatarHtml = `<div class="avatar">${member.username.charAt(0).toUpperCase()}</div>`;
             if(user.avatarUrl) {
                 avatarHtml = `<img src="${user.avatarUrl}" class="avatar">`;
             }
-            item.innerHTML = `<span class="math-inline">\{avatarHtml\}<span\></span>{member.username}</span>`;
+            item.innerHTML = `${avatarHtml}<span>${member.username}</span>`;
             mentionsPopup.appendChild(item);
         });
         mentionsPopup.style.display = 'block';
@@ -1264,7 +1569,47 @@
         messageInput.focus();
         mentionsPopup.style.display = 'none';
     }
-
+    async function showUserProfile(userId) {
+        if (!userId) return;
+        try {
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/${userId}`);
+            if (!response.ok) throw new Error('无法获取该用户信息');
+            const user = await response.json();
+            // 填充数据
+            document.getElementById('profile-page-avatar').src = user.avatarUrl || `https://ui-avatars.com/api/?name=${user.username}&background=random`;
+            document.getElementById('profile-page-username').innerText = user.username;
+            document.getElementById('profile-page-custom-id').innerText = `@${user.customId}`;
+            document.getElementById('profile-page-bio').innerText = user.bio || '这位用户很神秘，什么也没留下...';
+            viewingProfileUserId = user.id; // 记录当前查看的用户ID
+            // 显示弹窗
+            const modal = document.getElementById('user-profile-modal');
+            modal.style.display = 'flex';
+            // 使用一个微小的延迟来触发CSS动效
+            setTimeout(() => modal.classList.add('visible'), 10);
+        } catch (error) {
+            alert(error.message);
+        }
+    }
+    // 关闭用户主页
+    function closeUserProfileModal() {
+        const modal = document.getElementById('user-profile-modal');
+        modal.classList.remove('visible');
+        // 等待动效结束后再隐藏
+        setTimeout(() => {
+            modal.style.display = 'none';
+            viewingProfileUserId = null; // 清理ID
+        }, 300);
+    }
+    // 从主页上发起聊天
+    function startChatFromProfile() {
+        if (viewingProfileUserId) {
+            const userToChat = userCache[viewingProfileUserId];
+            if (userToChat) {
+                startPrivateChat(userToChat);
+                closeUserProfileModal(); // 发起聊天后关闭主页
+            }
+        }
+    }
 </script>
 </body>
 </html>

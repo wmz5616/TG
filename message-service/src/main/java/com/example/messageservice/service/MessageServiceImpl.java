@@ -3,17 +3,26 @@ package com.example.messageservice.service;
 import com.example.messageservice.client.GroupClient;
 import com.example.messageservice.client.UserClient;
 import com.example.messageservice.config.RabbitMQConfig;
+import com.example.messageservice.dto.ConversationDTO;
+import com.example.messageservice.dto.GroupDTO;
 import com.example.messageservice.dto.MessageStatusUpdate;
 import com.example.messageservice.dto.ReadReceiptPayload;
 import com.example.messageservice.model.Message;
 import com.example.messageservice.model.MessageType;
 import com.example.messageservice.model.MessageStatus;
+import com.example.messageservice.model.UserDTO;
 import com.example.messageservice.repository.MessageRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.math.BigInteger; // 【新增】导入
+import java.sql.Timestamp; // 【新增】导入
+import java.util.stream.Collectors; // 【新增】导入
+import java.util.function.Function; // 【新增】导入
+
 
 @Service
 public class MessageServiceImpl implements MessageService {
@@ -137,5 +146,98 @@ public class MessageServiceImpl implements MessageService {
         }
 
         return savedMessage;
+    }
+
+    @Override
+    public List<ConversationDTO> getConversations(Long userId) {
+        // 1. 获取用户所在的群组ID列表
+        List<Long> groupIds = new ArrayList<>();
+        try {
+            groupIds = groupClient.getGroupIdsForUser(userId);
+        } catch (Exception e) {
+            System.out.println("获取群组列表失败，可能用户未加入任何群组: " + e.getMessage());
+        }
+        if (groupIds.isEmpty()) {
+            groupIds.add(0L); // 防止SQL查询因IN ()为空而报错
+        }
+
+        // 2. 调用数据库查询，获取基础会话信息
+        List<Map<String, Object>> rawResults = messageRepository.findConversationsByUserId(userId, groupIds);
+        if (rawResults.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // 3. 从结果中分离出需要查询详情的 ID 列表
+        List<Long> userIdsToFetch = rawResults.stream()
+                .filter(row -> "PRIVATE".equals(row.get("type")))
+                .map(row -> ((Number) row.get("conversationId")).longValue())
+                .collect(Collectors.toList());
+
+        List<Long> groupIdsToFetch = rawResults.stream()
+                .filter(row -> "GROUP".equals(row.get("type")))
+                .map(row -> ((Number) row.get("conversationId")).longValue())
+                .collect(Collectors.toList());
+
+        // 4. 【【核心修改】】批量获取用户和群组的详细信息
+        // 我们先声明变量，然后在下面的逻辑中只对它进行一次赋值
+        Map<Long, UserDTO> userInfoMap;
+        if (!userIdsToFetch.isEmpty()) {
+            try {
+                userInfoMap = userClient.getUsersByIds(userIdsToFetch).stream()
+                        .collect(Collectors.toMap(UserDTO::getId, Function.identity()));
+            } catch (Exception e) {
+                System.out.println("批量获取用户信息失败: " + e.getMessage());
+                userInfoMap = Collections.emptyMap(); // 出错时赋一个空值
+            }
+        } else {
+            userInfoMap = Collections.emptyMap(); // 列表为空时赋一个空值
+        }
+
+        // 对 groupInfoMap 进行同样的操作
+        Map<Long, GroupDTO> groupInfoMap;
+        if (!groupIdsToFetch.isEmpty()){
+            try {
+                groupInfoMap = groupClient.getGroupsByIds(groupIdsToFetch).stream()
+                        .collect(Collectors.toMap(GroupDTO::getId, Function.identity()));
+            } catch (Exception e) {
+                System.out.println("批量获取群组信息失败: " + e.getMessage());
+                groupInfoMap = Collections.emptyMap();
+            }
+        } else {
+            groupInfoMap = Collections.emptyMap();
+        }
+
+
+        // 5. 最终组装
+        Map<Long, UserDTO> finalUserInfoMap = userInfoMap;
+        Map<Long, GroupDTO> finalGroupInfoMap = groupInfoMap;
+        return rawResults.stream().map(row -> {
+            Long conversationId = ((Number) row.get("conversationId")).longValue();
+            String typeStr = (String) row.get("type");
+            MessageType type = MessageType.valueOf(typeStr);
+
+            String name = "未知";
+            String avatarUrl = "";
+
+            if (type == MessageType.PRIVATE) {
+                UserDTO user = finalUserInfoMap.get(conversationId);
+                if (user != null) {
+                    name = user.getUsername();
+                    avatarUrl = user.getAvatarUrl();
+                }
+            } else { // GROUP
+                GroupDTO group = finalGroupInfoMap.get(conversationId);
+                if (group != null) {
+                    name = group.getName();
+                    // 暂无群头像，可预留
+                }
+            }
+
+            String lastMessageContent = (String) row.get("lastMessageContent");
+            LocalDateTime lastMessageTimestamp = row.get("lastMessageTimestamp") != null ? ((Timestamp) row.get("lastMessageTimestamp")).toLocalDateTime() : null;
+            Long unreadCount = ((Number) row.get("unreadCount")).longValue();
+
+            return new ConversationDTO(conversationId, type, name, avatarUrl, lastMessageContent, lastMessageTimestamp, unreadCount);
+        }).collect(Collectors.toList());
     }
 }
