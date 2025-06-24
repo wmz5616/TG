@@ -596,6 +596,11 @@
 
     function connectWebSocket() {
         const token = localStorage.getItem('jwt_token');
+        if (!token) {
+            console.error("无法连接WebSocket：缺少JWT token");
+            return;
+        }
+
         const headers = { 'userId': currentUser.id };
         const socket = new SockJS(`${GATEWAY_URL}/ws?token=${token}`);
         stompClient = Stomp.over(socket);
@@ -604,39 +609,114 @@
             document.getElementById('login-overlay').style.display = 'none';
             document.querySelector('.app-container').style.display = 'flex';
 
-            stompClient.subscribe('/topic/users/updated', message => {
+            loadAndRenderConversations();
+
+            stompClient.subscribe('/user/queue/profile-updates', message => {
                 const updatedUser = JSON.parse(message.body);
                 handleUserUpdate(updatedUser);
             });
 
             stompClient.subscribe('/user/queue/status', message => {
-                console.log('【探针2】从服务器收到消息状态更新:', JSON.parse(message.body));
                 const statusUpdate = JSON.parse(message.body);
                 const iconEl = document.getElementById(`status-icon-${statusUpdate.messageId}`);
-
                 if (iconEl && statusUpdate.status === 'READ') {
-                    // 根据您的要求，变为两个绿色的对勾
                     iconEl.innerHTML = '✓✓';
-                    iconEl.style.color = '#4ade80'; // 设置为绿色
-                    iconEl.className = 'message-status-icon read'; // 添加 'read' 类
+                    iconEl.style.color = '#4ade80';
+                    iconEl.className = 'message-status-icon read';
                 }
             });
 
-            loadAndRenderConversations();
+            // --- 【【核心修改在这里】】 ---
+            // 1. 只订阅私聊消息队列。这是永久订阅。
+            stompClient.subscribe(`/user/${currentUser.id}/queue/messages`, message => {
+                const parsedMsg = JSON.parse(message.body);
+
+                // 2. 更新左侧列表（现在对所有私聊消息都生效）
+                const isChatting = currentChat.id && currentChat.type === 'PRIVATE' && (parsedMsg.senderId == currentChat.id || parsedMsg.recipientId == currentChat.id);
+                updateConversationListRealtime(parsedMsg, isChatting);
+
+                // 3. 如果正在当前窗口聊天，则显示消息
+                if (isChatting) {
+                    showMessage(parsedMsg);
+                }
+            });
         });
     }
+    function updateConversationListRealtime(message, isChatting) {
+        const list = document.getElementById('conversation-list');
+        if (!list) return;
 
+        // 确定这个消息对应的会话ID (私聊是对方ID，群聊是群ID)
+        const conversationId = message.messageType === 'GROUP' ? message.groupId : (message.senderId == currentUser.id ? message.recipientId : message.senderId);
+
+        // 查找列表中是否已存在这个会话
+        let convoItem = list.querySelector(`.conversation-item[data-chat-id='${conversationId}']`);
+
+        // 如果会话不存在 (这是一个全新的会话)
+        if (!convoItem) {
+            // 重新加载整个列表来显示新会话 (这是最简单可靠的方式)
+            loadAndRenderConversations();
+            return;
+        }
+
+        // 如果会话已存在，则更新它
+        // a. 更新最后一条消息内容和时间
+        const lastMsgEl = convoItem.querySelector('.last-message-content');
+        const timeEl = convoItem.querySelector('.conversation-meta span');
+
+        if (lastMsgEl) {
+            lastMsgEl.innerHTML = formatLastMessage(message.content); // 使用我们之前写的格式化函数
+        }
+        if (timeEl && message.timestamp) {
+            timeEl.innerText = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        // b. 更新未读数 (只有当不是当前聊天时才增加)
+        if (!isChatting) {
+            const badgeEl = convoItem.querySelector('.unread-badge');
+            if (badgeEl) {
+                // 如果徽章已存在，增加数字
+                badgeEl.innerText = parseInt(badgeEl.innerText) + 1;
+            } else {
+                // 如果徽章不存在，创建并插入它
+                const newBadge = document.createElement('div');
+                newBadge.className = 'unread-badge';
+                newBadge.innerText = '1';
+                convoItem.querySelector('.conversation-meta').appendChild(newBadge);
+            }
+        }
+
+        // c. 将这个会话项移动到列表的最顶部
+        if (list.firstChild !== convoItem) {
+            list.prepend(convoItem);
+        }
+    }
     // --- 业务功能 ---
     async function loadAndRenderConversations() {
         try {
-            // 直接调用我们全新的、聚合了所有信息的接口
+            // 1. 从后端获取所有会话的列表
             const response = await fetchWithAuth(`${GATEWAY_URL}/api/messages/conversations`);
             if (!response.ok) {
                 throw new Error(`获取会话列表失败: ${response.status}`);
             }
             const conversations = await response.json();
 
-            // 将获取到的丰富数据直接交给渲染函数
+            // --- 【【核心修正】】 ---
+            // 2. 在渲染列表之前，用获取到的数据填充前端用户缓存
+            conversations.forEach(c => {
+                if (c.type === 'PRIVATE') {
+                    // 将每个私聊用户的信息存入 userCache
+                    userCache[c.conversationId] = {
+                        id: c.conversationId,
+                        username: c.name,
+                        avatarUrl: c.avatarUrl
+                        // 这里我们只需要这些基本信息就足够了
+                    };
+                }
+            });
+            // --- 【【核心修正结束】】 ---
+
+            // 3. 使用填充了缓存后的数据，正常渲染列表和启动状态更新
             renderConversationList(conversations);
             startStatusUpdates();
 
@@ -647,93 +727,45 @@
 
     // 【【请用这个完整的函数替换你现有的 selectConversation 函数】】
     async function selectConversation(element) {
-        lastMessageTimestamp = null;
+        lastMessageTimestamp = null; // 重置上一条消息的时间戳，用于显示时间分割线
+
         currentChat = {
             id: element.getAttribute('data-chat-id'),
             type: element.getAttribute('data-chat-type'),
             name: element.getAttribute('data-chat-name')
         };
 
+        // UI更新：高亮选中项，显示聊天区域
         document.querySelectorAll('.conversation-item.active').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
         document.getElementById('welcome-screen').style.display = 'none';
         document.getElementById('chat-area').style.display = 'flex';
         document.getElementById('chat-title').innerText = currentChat.name;
 
-        const addMemberBtn = document.getElementById('add-member-btn');
-        const viewMembersBtn = document.getElementById('view-members-btn');
-        const userSearchBar = document.getElementById('user-search-bar');
-
-        // 重置权限标志和UI
-        isCurrentUserGroupOwner = false;
-        userSearchBar.placeholder = "搜索用户或群组";
-        addMemberBtn.style.display = 'none'; // 默认隐藏添加按钮
-        viewMembersBtn.style.display = 'none'; // 默认隐藏查看成员按钮
-
-        if (currentChat.type === 'GROUP') {
-            viewMembersBtn.style.display = 'block';
-            viewMembersBtn.onclick = showGroupMembers;
-
-            // 【【这是新增的核心逻辑】】
-            try {
-                // 1. 通过API获取群组的详细信息
-                const groupInfoRes = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}`);
-                if (!groupInfoRes.ok) throw new Error('获取群组信息失败');
-                const groupInfo = await groupInfoRes.json();
-
-                // 2. 判断当前登录用户是否是群主
-                if (currentUser.id === groupInfo.ownerId) {
-                    isCurrentUserGroupOwner = true; // 设置权限标志
-                    userSearchBar.placeholder = "搜索用户以添加到群组"; // 修改提示语
-                    addMemberBtn.style.display = 'block'; // 【只有群主才能看到添加按钮】
-                }
-                // 如果不是群主，添加按钮将保持隐藏状态
-            } catch (error) {
-                console.error("检查群主权限时出错:", error);
-                // 如果发生错误，也确保按钮是隐藏的
-                addMemberBtn.style.display = 'none';
-            }
-
+        // 清除可能存在的未读徽章
+        const badgeEl = element.querySelector('.unread-badge');
+        if (badgeEl) {
+            badgeEl.remove();
         }
 
-        const headerAvatarEl = document.getElementById('chat-header-avatar');
-        const chatPartner = userCache[currentChat.id];
-        if (currentChat.type === 'PRIVATE' && chatPartner && chatPartner.avatarUrl) {
-            headerAvatarEl.innerHTML = `<img src="${chatPartner.avatarUrl}" class="avatar">`;
-        } else {
-            headerAvatarEl.innerHTML = `<span>${currentChat.name.charAt(0).toUpperCase()}</span>`;
-        }
-        document.getElementById('chat-status').innerText = '';
-
-        const msgWindow = document.getElementById('messages-window');
-        msgWindow.innerHTML = '';
-
-        if (activeSubscriptions['private']) {
-            activeSubscriptions['private'].unsubscribe();
-            delete activeSubscriptions['private'];
-        }
-        if (activeSubscriptions['group']) {
-            activeSubscriptions['group'].unsubscribe();
-            delete activeSubscriptions['group'];
-        }
-        if (activeSubscriptions['typing']) {
-            activeSubscriptions['typing'].unsubscribe();
-            delete activeSubscriptions['typing'];
+        // --- 【【核心修改在这里】】 ---
+        // 1. 取消所有旧的订阅 (特别是上一个群聊的订阅)
+        Object.values(activeSubscriptions).forEach(sub => sub.unsubscribe());
+        for (const key in activeSubscriptions) {
+            delete activeSubscriptions[key];
         }
 
-        activeSubscriptions['private'] = stompClient.subscribe(`/user/${currentUser.id}/queue/messages`, msg => {
-            const parsedMsg = JSON.parse(msg.body);
-            if (currentChat.type === 'PRIVATE' && (parsedMsg.senderId == currentChat.id || parsedMsg.recipientId == currentChat.id)) {
-                showMessage(parsedMsg);
-            }
-        });
-
+        // 2. 只在选中群聊时，才去订阅群聊的topic
         if (currentChat.type === 'GROUP') {
             activeSubscriptions['group'] = stompClient.subscribe(`/topic/group/${currentChat.id}`, msg => {
-                showMessage(JSON.parse(msg.body));
+                const parsedMsg = JSON.parse(msg.body);
+                showMessage(parsedMsg);
+                // 群聊消息也需要更新列表
+                updateConversationListRealtime(parsedMsg, true);
             });
         }
 
+        // 3. 订阅打字状态 (这部分逻辑不变)
         activeSubscriptions['typing'] = stompClient.subscribe(`/topic/typing/${currentChat.id}`, typingInfo => {
             const { username, isTyping } = JSON.parse(typingInfo.body);
             const statusEl = document.getElementById('chat-status');
@@ -745,7 +777,21 @@
                 }
             }
         });
+        // --- 【【核心修改结束】】 ---
 
+        // 更新聊天窗口顶部头像
+        const headerAvatarEl = document.getElementById('chat-header-avatar');
+        const chatPartner = userCache[currentChat.id];
+        if (currentChat.type === 'PRIVATE' && chatPartner && chatPartner.avatarUrl) {
+            headerAvatarEl.innerHTML = `<img src="${chatPartner.avatarUrl}" class="avatar">`;
+        } else {
+            headerAvatarEl.innerHTML = `<span>${currentChat.name.charAt(0).toUpperCase()}</span>`;
+        }
+        document.getElementById('chat-status').innerText = '';
+
+        // 加载历史消息
+        const msgWindow = document.getElementById('messages-window');
+        msgWindow.innerHTML = '';
         try {
             const historyUrl = currentChat.type === 'GROUP'
                 ? `${GATEWAY_URL}/api/messages/group/${currentChat.id}/history`
@@ -756,19 +802,6 @@
         } catch (e) {
             console.error("加载历史消息失败:", e);
         }
-
-        setTimeout(() => {
-            const unreadMessages = document.querySelectorAll('.message-row.other:not([data-status="READ"])');
-            if (unreadMessages.length > 0) {
-                const messageIds = Array.from(unreadMessages).map(msgEl => msgEl.id.split('-')[1]);
-                const payload = {
-                    messageIds: messageIds,
-                    readerId: currentUser.id
-                };
-                stompClient.send("/app/messages.read", {}, JSON.stringify(payload));
-                unreadMessages.forEach(msgEl => msgEl.setAttribute('data-status', 'READ'));
-            }
-        }, 1000);
     }
 
     function sendMessage() {
@@ -868,6 +901,27 @@
             return;
         }
 
+        // 新增一个内置的辅助函数，专门用于格式化最后一条消息
+        const formatLastMessage = (content) => {
+            if (!content) return '';
+            const trimmedContent = content.trim();
+
+            // 1. 优先判断是否为图片
+            if (trimmedContent.includes('<img') || trimmedContent.includes('message-image-container')) {
+                return '[图片]';
+            }
+            // 2. 判断是否为文件
+            if (trimmedContent.includes('<a href')) {
+                return '[文件]';
+            }
+            // 3. 判断是否为表情
+            if (trimmedContent.includes('/emojis/')) {
+                return '[表情]';
+            }
+            // 4. 如果是普通文本，移除所有HTML标签
+            return trimmedContent.replace(/<[^>]*>?/gm, '');
+        };
+
         conversations.forEach(c => {
             const item = document.createElement('div');
             item.className = 'conversation-item';
@@ -878,38 +932,40 @@
             item.setAttribute('data-chat-type', c.type);
             item.setAttribute('data-chat-name', c.name);
 
-            // 使用真实的头像，如果没有则使用文字头像
             let avatarHtml = `<div class="avatar">${(c.name || '?').charAt(0).toUpperCase()}</div>`;
             if (c.avatarUrl) {
                 avatarHtml = `<img class="avatar" src="${c.avatarUrl}" alt="${(c.name || '?').charAt(0)}">`;
             }
 
-            // 使用真实的最后一条消息时间和内容
             let lastMessageTime = '';
             if (c.lastMessageTimestamp) {
                 lastMessageTime = new Date(c.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             }
 
-            const lastMessageContent = c.lastMessageContent || (c.type === 'GROUP' ? '群聊' : '私聊');
+            // 【【【核心修改在这里】】】
+            // 从服务器获取原始的最后一条消息内容
+            const rawLastMessage = c.lastMessageContent || (c.type === 'GROUP' ? '群聊' : '私聊');
+            // 调用我们刚刚定义的辅助函数，强制进行转换
+            const formattedLastMessage = formatLastMessage(rawLastMessage);
+            // 【【【核心修改在这里】】】
+
             const unreadCount = c.unreadCount || 0;
 
-            // 渲染列表项的 HTML
             item.innerHTML = `
-            <div class="avatar-container">
-                ${avatarHtml}
-                ${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}
-            </div>
-            <div class="conversation-details">
-                <span class="conversation-name">${c.name}</span>
-                <div class="last-message-content">${lastMessageContent}</div>
-            </div>
-            <div class="conversation-meta">
-                <span>${lastMessageTime}</span>
-                ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
-            </div>
-        `;
+        <div class="avatar-container">
+            ${avatarHtml}
+            ${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}
+        </div>
+        <div class="conversation-details">
+            <span class="conversation-name">${c.name}</span>
+            <div class="last-message-content">${formattedLastMessage}</div>
+        </div>
+        <div class="conversation-meta">
+            <span>${lastMessageTime}</span>
+            ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+        </div>
+    `;
 
-            // 绑定事件
             const avatarContainer = item.querySelector('.avatar-container');
             if (avatarContainer) {
                 avatarContainer.onclick = (event) => {
@@ -1245,13 +1301,10 @@
     function handleUserUpdate(updatedUser) {
         if (!updatedUser || !updatedUser.id) return;
 
-        // 为了方便调试，可以在控制台打印接收到的事件
         console.log("【事件】接收到用户资料更新:", updatedUser);
 
-        // 1. 更新前端的用户信息缓存，这很重要
         userCache[updatedUser.id] = updatedUser;
 
-        // 2. 更新左上角滑动菜单中的头像和昵称 (如果更新的是当前登录用户)
         if (currentUser && updatedUser.id === currentUser.id) {
             const navAvatar = document.getElementById('nav-avatar');
             const navUsername = document.getElementById('nav-username');
@@ -1263,29 +1316,31 @@
             navUsername.innerText = updatedUser.username;
         }
 
-        // 3. 更新左侧聊天列表中的头像和昵称
-        // 我们通过用户ID和类型来精确查找
         const conversationItem = document.querySelector(`.conversation-item[data-chat-id='${updatedUser.id}'][data-chat-type='PRIVATE']`);
         if (conversationItem) {
-            const avatarElement = conversationItem.querySelector('.avatar');
+            // --- 【【核心修正从这里开始】】 ---
+            const avatarContainer = conversationItem.querySelector('.avatar-container');
             const nameElement = conversationItem.querySelector('.conversation-name');
 
-            if (avatarElement) {
-                // 如果原来是文字头像，现在有图片了，就替换成 img 标签
-                if (avatarElement.tagName.toLowerCase() !== 'img' && updatedUser.avatarUrl) {
-                    avatarElement.outerHTML = `<img class="avatar" src="${updatedUser.avatarUrl}" alt="${updatedUser.username.charAt(0)}">`;
-                }
-                // 如果原来就是 img 标签，直接更新 src
-                else if (avatarElement.tagName.toLowerCase() === 'img') {
-                    avatarElement.src = updatedUser.avatarUrl;
-                }
+            if (avatarContainer && updatedUser.avatarUrl) {
+                // 不再使用 outerHTML，而是修改容器内部的内容
+                avatarContainer.innerHTML = `
+                <img class="avatar" src="${updatedUser.avatarUrl}" alt="${updatedUser.username.charAt(0)}">
+                <div class="status-dot offline"></div>
+            `;
+                // 重新绑定可能丢失的事件
+                avatarContainer.onclick = (event) => {
+                    event.stopPropagation();
+                    showUserProfile(updatedUser.id);
+                };
             }
+
             if (nameElement) {
                 nameElement.textContent = updatedUser.username;
             }
+            // --- 【【核心修正到这里结束】】 ---
         }
 
-        // 4. 如果当前聊天窗口正好是这个用户，更新顶部的头像和昵称
         if (currentChat.id == updatedUser.id && currentChat.type === 'PRIVATE') {
             const headerAvatar = document.getElementById('chat-header-avatar');
             const headerTitle = document.getElementById('chat-title');
@@ -1301,6 +1356,7 @@
                 headerTitle.innerText = updatedUser.username;
             }
         }
+        loadAndRenderConversations();
     }
 
     function closeViewMembersModal() {

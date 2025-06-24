@@ -17,7 +17,11 @@ public class UserEventListener {
     public void handleUserProfileUpdate(UserDTO updatedUser) {
         if (updatedUser != null && updatedUser.getId() != null) {
             System.out.println("【事件】收到用户资料更新事件: " + updatedUser.getUsername());
-            messagingTemplate.convertAndSend("/topic/users/updated", updatedUser);
+            messagingTemplate.convertAndSendToUser(
+                    updatedUser.getId().toString(),
+                    "/queue/profile-updates",  // 使用私有队列
+                    updatedUser
+            );
         }
     }
 }

@@ -234,10 +234,49 @@ public class MessageServiceImpl implements MessageService {
             }
 
             String lastMessageContent = (String) row.get("lastMessageContent");
+            String formattedLastMessage = formatLastMessageForList(lastMessageContent);
+
             LocalDateTime lastMessageTimestamp = row.get("lastMessageTimestamp") != null ? ((Timestamp) row.get("lastMessageTimestamp")).toLocalDateTime() : null;
             Long unreadCount = ((Number) row.get("unreadCount")).longValue();
 
             return new ConversationDTO(conversationId, type, name, avatarUrl, lastMessageContent, lastMessageTimestamp, unreadCount);
         }).collect(Collectors.toList());
     }
+    private String formatLastMessageForList(String content) {
+        if (content == null || content.isBlank()) {
+            return "";
+        }
+
+        // 创建一个临时的、去掉前后空格的副本用于判断
+        String trimmedContent = content.trim();
+
+        // 1. 最优先判断：内容是否就是一个URL，并且是常见的图片格式
+        //    这可以处理直接发送图片链接作为消息的情况
+        if (trimmedContent.matches("^https?://.*\\.(jpeg|jpg|png|gif|bmp|webp)$")) {
+            return "[图片]";
+        }
+
+        // 2. 其次，判断是否包含HTML图片标签或我们约定的图片容器
+        if (trimmedContent.contains("<img") || trimmedContent.contains("message-image-container")) {
+            return "[图片]";
+        }
+
+        // 3. 判断是否为文件链接
+        if (trimmedContent.contains("<a href")) {
+            return "[文件]";
+        }
+
+        // 4. 判断是否为表情/贴纸
+        if (trimmedContent.contains("/emojis/")) {
+            return "[表情]";
+        }
+
+        // 5. 如果以上都不是，则视为普通文本处理
+        String plainText = trimmedContent.replaceAll("<[^>]*>", ""); // 移除所有HTML标签
+        if (plainText.length() > 20) {
+            return plainText.substring(0, 20) + "..."; // 截断过长的文本
+        }
+        return plainText;
+    }
+
 }
