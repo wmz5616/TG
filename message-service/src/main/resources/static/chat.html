@@ -261,6 +261,15 @@
         .profile-bio {font-size: 15px;line-height: 1.5;color: var(--c-text);margin-bottom: 25px;min-height: 45px; /* 至少给简介一个高度 */}
         .profile-message-btn {width: 100%;padding: 12px;border: none;border-radius: 8px;background-color: var(--c-primary);color: white;font-size: 16px;font-weight: 600;cursor: pointer;transition: background-color 0.2s;}
         .profile-message-btn:hover {background-color: #459cff;}
+
+        /* 【【新增】】搜索结果分类标题 */
+        .search-results-header {
+            padding: 10px 15px;
+            color: var(--c-text-light);
+            font-size: 13px;
+            font-weight: 600;
+            border-bottom: 1px solid var(--c-bg);
+        }
     </style>
 </head>
 <body>
@@ -475,8 +484,11 @@
     const GATEWAY_URL = 'http://localhost:8888';
     let stompClient = null;
     let currentUser = {id: null, username: null};
+    let fullCurrentUserProfile = null;
+    let currentGroupInfo = null;
     let currentChat = {id: null, type: null, name: null};
     const userCache = {};
+    const groupCache = {}; // 【新增】群组缓存
     let statusUpdateInterval = null;
     const activeSubscriptions = {};
     let typingTimeout = null;
@@ -496,15 +508,23 @@
             window.location.reload();
             return Promise.reject("No token found");
         }
-        const defaultHeaders = { 'Authorization': `Bearer ${token}` };
-        if (!(options.body instanceof FormData)) {
-            defaultHeaders['Content-Type'] = 'application/json';
+
+        // 1. 从一个干净的 Headers 对象开始
+        const headers = new Headers(options.headers);
+        headers.set('Authorization', `Bearer ${token}`);
+
+        // 2. 根据 body 的类型来决定 Content-Type
+        if (options.body instanceof FormData) {
+            // 如果是文件上传，必须删除 Content-Type，让浏览器自动设置
+            headers.delete('Content-Type');
+        } else if (typeof options.body === 'string') {
+            // 如果 body 是一个字符串 (例如 JSON.stringify 的结果)，则明确设置类型为 JSON
+            headers.set('Content-Type', 'application/json');
         }
-        const finalHeaders = { ...defaultHeaders, ...options.headers };
-        const finalOptions = { ...options, headers: finalHeaders };
+
+        const finalOptions = { ...options, headers };
         return fetch(url, finalOptions);
     }
-
     function showRegisterForm(event) {
         event.preventDefault(); // 阻止 a 标签的默认跳转行为
         document.getElementById('login-overlay').style.display = 'none';
@@ -518,41 +538,33 @@
     }
 
     async function register() {
-        // 1. 获取注册表单中的所有输入值
         const username = document.getElementById('register-username').value.trim();
         const customId = document.getElementById('register-id').value.trim();
         const password = document.getElementById('register-password').value.trim();
         const errorEl = document.getElementById('register-error');
 
-        // 【【核心修改】】安全地获取 email 的值
         const emailInput = document.getElementById('register-email');
-        // 如果 email 输入框存在，就获取它的值；如果不存在，则默认为一个空字符串
         const email = emailInput ? emailInput.value.trim() : "";
 
-        // 2. 简单的前端校验
         if (!username || !customId || !password) {
             errorEl.innerText = '昵称、ID号和密码不能为空！';
             return;
         }
         errorEl.innerText = '';
 
-        // 3. 构造发送到后端的请求体
         const registrationRequest = { username, customId, password, email };
 
         try {
-            // 4. 调用后端的注册接口
             const response = await fetch(`${GATEWAY_URL}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(registrationRequest)
             });
 
-            // 5. 处理后端的响应
             if (response.ok) {
                 alert('注册成功！现在可以用你的ID号登录了。');
-                showLoginForm(new Event('click')); // 注册成功后自动跳转回登录界面
+                showLoginForm(new Event('click'));
             } else {
-                // 如果后端返回错误（比如ID已存在），显示错误信息
                 const errorMessage = await response.text();
                 errorEl.innerText = errorMessage;
             }
@@ -561,13 +573,12 @@
             errorEl.innerText = '发生网络错误，请稍后再试。';
         }
     }
-    // --- 核心认证与连接 ---
     async function login() {
         const username = document.getElementById('login-id').value.trim();
         const password = document.getElementById('login-password').value.trim();
         const errorEl = document.getElementById('login-error');
         if (!username || !password) {
-            errorEl.innerText = '请输入用户名和密码！';
+            errorEl.innerText = '请输入ID号和密码！';
             return;
         }
         errorEl.innerText = '';
@@ -584,17 +595,16 @@
 
             const profileResponse = await fetchWithAuth(`${GATEWAY_URL}/api/users/${currentUser.id}`);
             if (!profileResponse.ok) throw new Error('获取用户个人资料失败');
-            const fullUserProfile = await profileResponse.json();
-
-            userCache[currentUser.id] = fullUserProfile;
-
+            // **将完整的用户信息存到全局变量中**
+            fullCurrentUserProfile = await profileResponse.json();
+            // 同时更新缓存
+            userCache[currentUser.id] = fullCurrentUserProfile;
             connectWebSocket();
         } catch (error) {
             errorEl.innerText = error.message;
         }
     }
-
-    function connectWebSocket() {
+    async function connectWebSocket() {
         const token = localStorage.getItem('jwt_token');
         if (!token) {
             console.error("无法连接WebSocket：缺少JWT token");
@@ -605,129 +615,99 @@
         const socket = new SockJS(`${GATEWAY_URL}/ws?token=${token}`);
         stompClient = Stomp.over(socket);
 
-        stompClient.connect(headers, frame => {
+        stompClient.connect(headers, async (frame) => {
             document.getElementById('login-overlay').style.display = 'none';
             document.querySelector('.app-container').style.display = 'flex';
 
-            loadAndRenderConversations();
+            // 初始加载会话列表
+            await loadAndRenderConversations();
 
+            // 订阅用户相关的更新（如头像变化）
             stompClient.subscribe('/user/queue/profile-updates', message => {
                 const updatedUser = JSON.parse(message.body);
                 handleUserUpdate(updatedUser);
             });
 
+            // 订阅消息已读回执
             stompClient.subscribe('/user/queue/status', message => {
                 const statusUpdate = JSON.parse(message.body);
                 const iconEl = document.getElementById(`status-icon-${statusUpdate.messageId}`);
                 if (iconEl && statusUpdate.status === 'READ') {
                     iconEl.innerHTML = '✓✓';
-                    iconEl.style.color = '#4ade80';
                     iconEl.className = 'message-status-icon read';
                 }
             });
 
-            // --- 【【核心修改在这里】】 ---
-            // 1. 只订阅私聊消息队列。这是永久订阅。
+            // 订阅私聊消息
             stompClient.subscribe(`/user/${currentUser.id}/queue/messages`, message => {
                 const parsedMsg = JSON.parse(message.body);
-
-                // 2. 更新左侧列表（现在对所有私聊消息都生效）
-                const isChatting = currentChat.id && currentChat.type === 'PRIVATE' && (parsedMsg.senderId == currentChat.id || parsedMsg.recipientId == currentChat.id);
+                const isChatting = currentChat.id && currentChat.type === 'PRIVATE' &&
+                    (parsedMsg.senderId == currentChat.id || parsedMsg.recipientId == currentChat.id);
                 updateConversationListRealtime(parsedMsg, isChatting);
-
-                // 3. 如果正在当前窗口聊天，则显示消息
                 if (isChatting) {
                     showMessage(parsedMsg);
                 }
             });
+
+            // **【问题2 修复】获取并订阅所有群组频道**
+            try {
+                const groupIdsRes = await fetchWithAuth(`${GATEWAY_URL}/api/groups/user/${currentUser.id}/ids`);
+                const groupIds = await groupIdsRes.json();
+                groupIds.forEach(groupId => {
+                    stompClient.subscribe(`/topic/group/${groupId}`, msg => {
+                        const parsedMsg = JSON.parse(msg.body);
+                        const isChatting = currentChat.id == parsedMsg.groupId && currentChat.type === 'GROUP';
+                        updateConversationListRealtime(parsedMsg, isChatting);
+                        if(isChatting) {
+                            showMessage(parsedMsg);
+                        }
+                    });
+                });
+            } catch (e) {
+                console.error("获取或订阅群组频道失败:", e);
+            }
         });
     }
-    function updateConversationListRealtime(message, isChatting) {
-        const list = document.getElementById('conversation-list');
-        if (!list) return;
 
-        // 确定这个消息对应的会话ID (私聊是对方ID，群聊是群ID)
-        const conversationId = message.messageType === 'GROUP' ? message.groupId : (message.senderId == currentUser.id ? message.recipientId : message.senderId);
-
-        // 查找列表中是否已存在这个会话
-        let convoItem = list.querySelector(`.conversation-item[data-chat-id='${conversationId}']`);
-
-        // 如果会话不存在 (这是一个全新的会话)
-        if (!convoItem) {
-            // 重新加载整个列表来显示新会话 (这是最简单可靠的方式)
-            loadAndRenderConversations();
-            return;
-        }
-
-        // 如果会话已存在，则更新它
-        // a. 更新最后一条消息内容和时间
-        const lastMsgEl = convoItem.querySelector('.last-message-content');
-        const timeEl = convoItem.querySelector('.conversation-meta span');
-
-        if (lastMsgEl) {
-            lastMsgEl.innerHTML = formatLastMessage(message.content); // 使用我们之前写的格式化函数
-        }
-        if (timeEl && message.timestamp) {
-            timeEl.innerText = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-
-        // b. 更新未读数 (只有当不是当前聊天时才增加)
-        if (!isChatting) {
-            const badgeEl = convoItem.querySelector('.unread-badge');
-            if (badgeEl) {
-                // 如果徽章已存在，增加数字
-                badgeEl.innerText = parseInt(badgeEl.innerText) + 1;
-            } else {
-                // 如果徽章不存在，创建并插入它
-                const newBadge = document.createElement('div');
-                newBadge.className = 'unread-badge';
-                newBadge.innerText = '1';
-                convoItem.querySelector('.conversation-meta').appendChild(newBadge);
-            }
-        }
-
-        // c. 将这个会话项移动到列表的最顶部
-        if (list.firstChild !== convoItem) {
-            list.prepend(convoItem);
-        }
-    }
-    // --- 业务功能 ---
+    // 【【问题 4 核心修复点】】
     async function loadAndRenderConversations() {
         try {
-            // 1. 从后端获取所有会话的列表
+            // 这个接口现在会返回所有会话，包括没有消息的新群组
             const response = await fetchWithAuth(`${GATEWAY_URL}/api/messages/conversations`);
             if (!response.ok) {
                 throw new Error(`获取会话列表失败: ${response.status}`);
             }
             const conversations = await response.json();
 
-            // --- 【【核心修正】】 ---
-            // 2. 在渲染列表之前，用获取到的数据填充前端用户缓存
+            // 清空旧缓存
+            Object.keys(userCache).forEach(key => delete userCache[key]);
+            Object.keys(groupCache).forEach(key => delete groupCache[key]);
+            if (fullCurrentUserProfile) {
+                userCache[currentUser.id] = fullCurrentUserProfile;
+            }
+
+            // 填充新缓存
             conversations.forEach(c => {
                 if (c.type === 'PRIVATE') {
-                    // 将每个私聊用户的信息存入 userCache
-                    userCache[c.conversationId] = {
-                        id: c.conversationId,
-                        username: c.name,
-                        avatarUrl: c.avatarUrl
-                        // 这里我们只需要这些基本信息就足够了
-                    };
+                    userCache[c.conversationId] = { id: c.conversationId, username: c.name, avatarUrl: c.avatarUrl };
+                } else {
+                    groupCache[c.conversationId] = { id: c.conversationId, name: c.name, avatarUrl: c.avatarUrl };
                 }
             });
-            // --- 【【核心修正结束】】 ---
 
-            // 3. 使用填充了缓存后的数据，正常渲染列表和启动状态更新
             renderConversationList(conversations);
             startStatusUpdates();
 
         } catch (e) {
             console.error('获取会话列表失败:', e);
+            document.getElementById('conversation-list').innerHTML = `<p style="text-align:center; color: var(--c-text-light); padding: 20px;">加载会话失败，请刷新页面重试。</p>`;
         }
     }
 
-    // 【【请用这个完整的函数替换你现有的 selectConversation 函数】】
+    // 【【问题 3 核心修复点】】
     async function selectConversation(element) {
-        lastMessageTimestamp = null; // 重置上一条消息的时间戳，用于显示时间分割线
+        lastMessageTimestamp = null;
+        currentGroupInfo = null; // 切换会话时，重置当前群组信息
 
         currentChat = {
             id: element.getAttribute('data-chat-id'),
@@ -735,87 +715,287 @@
             name: element.getAttribute('data-chat-name')
         };
 
-        // UI更新：高亮选中项，显示聊天区域
         document.querySelectorAll('.conversation-item.active').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
         document.getElementById('welcome-screen').style.display = 'none';
         document.getElementById('chat-area').style.display = 'flex';
-        document.getElementById('chat-title').innerText = currentChat.name;
 
-        // 清除可能存在的未读徽章
         const badgeEl = element.querySelector('.unread-badge');
-        if (badgeEl) {
-            badgeEl.remove();
-        }
+        if (badgeEl) badgeEl.remove();
 
-        // --- 【【核心修改在这里】】 ---
-        // 1. 取消所有旧的订阅 (特别是上一个群聊的订阅)
-        Object.values(activeSubscriptions).forEach(sub => sub.unsubscribe());
-        for (const key in activeSubscriptions) {
-            delete activeSubscriptions[key];
-        }
-
-        // 2. 只在选中群聊时，才去订阅群聊的topic
+        const viewMembersBtn = document.getElementById('view-members-btn');
         if (currentChat.type === 'GROUP') {
-            activeSubscriptions['group'] = stompClient.subscribe(`/topic/group/${currentChat.id}`, msg => {
-                const parsedMsg = JSON.parse(msg.body);
-                showMessage(parsedMsg);
-                // 群聊消息也需要更新列表
-                updateConversationListRealtime(parsedMsg, true);
-            });
+            viewMembersBtn.style.display = 'flex';
+            try {
+                const res = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}`);
+                if (res.ok) {
+                    currentGroupInfo = await res.json(); // 存储群信息到全局变量
+                    console.log(`[权限调试] 已进入群聊 ${currentChat.name}。当前群主ID为: ${currentGroupInfo.ownerId}，你登录的用户ID为: ${currentUser.id}`);
+                }
+                else console.error("获取群组详情失败", await res.text());
+            } catch (e) { console.error("获取群组详情失败", e); }
+        } else {
+            viewMembersBtn.style.display = 'none';
         }
 
-        // 3. 订阅打字状态 (这部分逻辑不变)
+        if (activeSubscriptions['typing']) activeSubscriptions['typing'].unsubscribe();
         activeSubscriptions['typing'] = stompClient.subscribe(`/topic/typing/${currentChat.id}`, typingInfo => {
-            const { username, isTyping } = JSON.parse(typingInfo.body);
+            const data = JSON.parse(typingInfo.body);
             const statusEl = document.getElementById('chat-status');
-            if (username !== currentUser.username) {
-                statusEl.innerText = isTyping ? `${username} 正在输入...` : '';
+            if (data.username && data.username !== currentUser.username && data.isTyping) {
+                statusEl.innerText = `${data.username} 正在输入...`;
                 clearTimeout(typingTimeout);
-                if (isTyping) {
-                    typingTimeout = setTimeout(() => { statusEl.innerText = ''; }, 3000);
-                }
+                typingTimeout = setTimeout(() => { statusEl.innerText = ''; }, 3000);
             }
         });
-        // --- 【【核心修改结束】】 ---
 
-        // 更新聊天窗口顶部头像
         const headerAvatarEl = document.getElementById('chat-header-avatar');
-        const chatPartner = userCache[currentChat.id];
-        if (currentChat.type === 'PRIVATE' && chatPartner && chatPartner.avatarUrl) {
-            headerAvatarEl.innerHTML = `<img src="${chatPartner.avatarUrl}" class="avatar">`;
-        } else {
-            headerAvatarEl.innerHTML = `<span>${currentChat.name.charAt(0).toUpperCase()}</span>`;
-        }
+        const chatPartner = currentChat.type === 'PRIVATE' ? userCache[currentChat.id] : groupCache[currentChat.id];
+        headerAvatarEl.innerHTML = (chatPartner && chatPartner.avatarUrl) ? `<img src="${chatPartner.avatarUrl}" class="avatar">` : `<span>${currentChat.name.charAt(0).toUpperCase()}</span>`;
+        document.getElementById('chat-title').innerText = currentChat.name;
         document.getElementById('chat-status').innerText = '';
 
-        // 加载历史消息
         const msgWindow = document.getElementById('messages-window');
         msgWindow.innerHTML = '';
         try {
-            const historyUrl = currentChat.type === 'GROUP'
-                ? `${GATEWAY_URL}/api/messages/group/${currentChat.id}/history`
-                : `${GATEWAY_URL}/api/messages/history?user1Id=${currentUser.id}&user2Id=${currentChat.id}`;
+            const historyUrl = currentChat.type === 'GROUP' ? `${GATEWAY_URL}/api/messages/group/${currentChat.id}/history` : `${GATEWAY_URL}/api/messages/history?user1Id=${currentUser.id}&user2Id=${currentChat.id}`;
             const res = await fetchWithAuth(historyUrl);
             const messages = await res.json();
             messages.forEach(showMessage);
-        } catch (e) {
-            console.error("加载历史消息失败:", e);
+            msgWindow.scrollTop = msgWindow.scrollHeight;
+            const unreadMessageIds = messages.filter(msg => msg.recipientId === currentUser.id && msg.status !== 'READ').map(msg => msg.id);
+            if (unreadMessageIds.length > 0 && stompClient && stompClient.connected) {
+                stompClient.send("/app/messages.read", {}, JSON.stringify({ messageIds: unreadMessageIds, readerId: currentUser.id }));
+            }
+        } catch (e) { console.error("加载历史消息失败:", e); }
+    }
+
+    // 【【问题 1 核心修复点】】
+    function handleUserSearch(event) {
+        clearTimeout(searchDebounceTimeout);
+        const query = event.target.value.trim();
+        const resultsContainer = document.getElementById('search-results');
+        if (query.length < 1) { // 至少输入1个字符才搜索
+            resultsContainer.innerHTML = '';
+            resultsContainer.style.display = 'none';
+            return;
+        }
+        searchDebounceTimeout = setTimeout(async () => {
+            try {
+                // 并行发起两个搜索请求
+                const [userRes, groupRes] = await Promise.all([
+                    fetchWithAuth(`${GATEWAY_URL}/api/users/search?query=${query}`),
+                    fetchWithAuth(`${GATEWAY_URL}/api/groups/search?name=${query}`)
+                ]);
+
+                const users = await userRes.json();
+                const groups = await groupRes.json();
+
+                renderSearchResults(users, groups); // 将两个结果都传入渲染函数
+            } catch (error) {
+                console.error("搜索失败:", error);
+                resultsContainer.innerHTML = '<p style="text-align:center;color:var(--c-text-light);padding:15px;">搜索失败</p>';
+                resultsContainer.style.display = 'block';
+            }
+        }, 300); // 延迟300毫秒
+    }
+
+    // 【【问题 1 核心修复点】】
+    function renderSearchResults(users = [], groups = []) {
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = '';
+        if (users.length === 0 && groups.length === 0) {
+            resultsContainer.innerHTML = '<p style="text-align:center;color:var(--c-text-light);padding:15px;">无结果</p>';
+            resultsContainer.style.display = 'block';
+            return;
+        }
+
+        if (groups.length > 0) {
+            resultsContainer.innerHTML += '<div class="search-results-header">群组</div>';
+            groups.forEach(group => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+                item.onclick = () => startGroupChat(group);
+                let avatarHtml = `<div class="avatar">${group.name.charAt(0).toUpperCase()}</div>`;
+                item.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${group.name}</div>`;
+                resultsContainer.appendChild(item);
+            });
+        }
+
+        if (users.length > 0) {
+            resultsContainer.innerHTML += '<div class="search-results-header">用户</div>';
+            users.forEach(user => {
+                if (user.id == currentUser.id) return;
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+
+                // **前端权限判断**
+                const isOwner = currentGroupInfo && currentUser.id === currentGroupInfo.ownerId;
+                if (currentChat.type === 'GROUP') {
+                    console.log(`[权限调试] 判断用户点击行为：是否为群主? ${isOwner}`);
+                }
+
+                if (currentChat.type === 'GROUP' && isOwner) {
+                    item.onclick = () => addUserToGroup(user);
+                } else {
+                    item.onclick = () => startPrivateChat(user);
+                }
+
+                let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
+                if (user.avatarUrl) {
+                    avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
+                }
+                item.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${user.username}</div>`;
+                resultsContainer.appendChild(item);
+            });
+        }
+        resultsContainer.style.display = 'block';
+    }
+
+    // 【【新增】】点击搜索到的群组后，开始群聊
+    function startGroupChat(group) {
+        hideSearchResults();
+        document.getElementById('user-search-bar').value = '';
+
+        let convoItem = document.querySelector(`.conversation-item[data-chat-id='${group.id}'][data-chat-type='GROUP']`);
+
+        if (convoItem) {
+            // 如果会话已存在，直接点击它
+            convoItem.click();
+        } else {
+            // 如果会话不存在，需要重新加载整个列表，因为新加入的群聊可能没有历史消息，无法手动创建
+            alert("即将加入群聊，列表将刷新。");
+            // 在实际应用中，这里可能需要调用一个“加入群聊”的接口
+            // 为简化，我们直接重新加载会话列表，依赖后端的逻辑
+            loadAndRenderConversations().then(() => {
+                // 刷新后再次查找并点击
+                setTimeout(() => {
+                    document.querySelector(`.conversation-item[data-chat-id='${group.id}'][data-chat-type='GROUP']`)?.click();
+                }, 500);
+            });
         }
     }
 
+    // 【【问题 2 核心修复点】】
+    function handleUserUpdate(updatedUser) {
+        if (!updatedUser || !updatedUser.id) return;
+
+        console.log("【事件】接收到用户资料更新:", updatedUser);
+
+        // 1. 更新缓存
+        userCache[updatedUser.id] = updatedUser;
+
+        // 2. 更新导航栏（如果更新的是当前用户）
+        if (currentUser && updatedUser.id === currentUser.id) {
+            currentUser.username = updatedUser.username; // 更新当前用户对象的用户名
+            const navAvatar = document.getElementById('nav-avatar');
+            const navUsername = document.getElementById('nav-username');
+            if (updatedUser.avatarUrl) {
+                navAvatar.innerHTML = `<img src="${updatedUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+            } else {
+                navAvatar.innerHTML = updatedUser.username.charAt(0).toUpperCase();
+            }
+            navUsername.innerText = updatedUser.username;
+        }
+
+        // 3. **精确更新**左侧会话列表中的项目
+        const conversationItem = document.querySelector(`.conversation-item[data-chat-id='${updatedUser.id}'][data-chat-type='PRIVATE']`);
+        if (conversationItem) {
+            const avatarElement = conversationItem.querySelector('.avatar');
+            const nameElement = conversationItem.querySelector('.conversation-name');
+
+            if (avatarElement) {
+                if (updatedUser.avatarUrl) {
+                    avatarElement.outerHTML = `<img class="avatar" src="${updatedUser.avatarUrl}" alt="${updatedUser.username.charAt(0)}">`;
+                } else {
+                    avatarElement.outerHTML = `<div class="avatar">${updatedUser.username.charAt(0).toUpperCase()}</div>`;
+                }
+            }
+            if (nameElement) {
+                nameElement.textContent = updatedUser.username;
+            }
+            // 更新data-chat-name属性，以便下次点击时显示正确的名字
+            conversationItem.setAttribute('data-chat-name', updatedUser.username);
+        }
+
+        // 4. 更新当前聊天窗口的顶部（如果正在与该用户聊天）
+        if (currentChat.id == updatedUser.id && currentChat.type === 'PRIVATE') {
+            const headerAvatar = document.getElementById('chat-header-avatar');
+            const headerTitle = document.getElementById('chat-title');
+
+            if (headerAvatar) {
+                if (updatedUser.avatarUrl) {
+                    headerAvatar.innerHTML = `<img src="${updatedUser.avatarUrl}" class="avatar">`;
+                } else {
+                    headerAvatar.innerHTML = `<span>${updatedUser.username.charAt(0).toUpperCase()}</span>`;
+                }
+            }
+            if(headerTitle) {
+                headerTitle.innerText = updatedUser.username;
+            }
+            // 更新currentChat对象中的名字
+            currentChat.name = updatedUser.username;
+        }
+    }
+
+
+    /* --- 以下是其他未做重大修改的函数，保持其最新版本即可 --- */
+
+    function updateConversationListRealtime(message, isChatting) {
+        const list = document.getElementById('conversation-list');
+        if (!list) return;
+
+        const conversationId = message.messageType === 'GROUP' ? message.groupId : (message.senderId == currentUser.id ? message.recipientId : message.senderId);
+        let convoItem = list.querySelector(`.conversation-item[data-chat-id='${conversationId}']`);
+
+        if (!convoItem) {
+            loadAndRenderConversations();
+            return;
+        }
+
+        const formatLastMessageForList = (content) => {
+            if (!content) return '';
+            const trimmedContent = content.trim();
+            if (trimmedContent.includes('message-image-container')) return '[图片]';
+            if (trimmedContent.includes('<a href')) return '[文件]';
+            if (trimmedContent.includes('/emojis/')) return '[表情]';
+            return trimmedContent.replace(/<[^>]*>?/gm, '');
+        };
+
+
+        const lastMsgEl = convoItem.querySelector('.last-message-content');
+        const timeEl = convoItem.querySelector('.conversation-meta span');
+
+        if (lastMsgEl) lastMsgEl.innerHTML = formatLastMessageForList(message.content);
+        if (timeEl && message.timestamp) timeEl.innerText = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        if (!isChatting) {
+            const badgeEl = convoItem.querySelector('.unread-badge');
+            if (badgeEl) {
+                badgeEl.innerText = parseInt(badgeEl.innerText) + 1;
+                badgeEl.style.display = 'flex';
+            } else {
+                const newBadge = document.createElement('div');
+                newBadge.className = 'unread-badge';
+                newBadge.innerText = '1';
+                convoItem.querySelector('.conversation-meta').appendChild(newBadge);
+            }
+        }
+
+        if (list.firstChild !== convoItem) list.prepend(convoItem);
+    }
+
     function sendMessage() {
+        const messageInput = document.getElementById('message-content');
         let content = messageInput.value;
         if (!content.trim() || !currentChat.id || !stompClient) return;
 
         content = content.replace(/@(\w+)/g, (match, username) => {
-            // 在userCache中查找这个username对应的用户
             const user = Object.values(userCache).find(u => u.username === username);
             if (user) {
-                // 如果找到了，就替换为带data-user-id的链接
-                return `<span class="mention" data-user-id="<span class="math-inline">\{user\.id\}"\>@</span>{username}</span>`;
+                return `<span class="mention" data-user-id="${user.id}">@${username}</span>`;
             }
-            return match; // 如果没找到，保持原样
+            return match;
         });
 
         const payload = {
@@ -828,240 +1008,192 @@
         else payload.recipientId = currentChat.id;
 
         stompClient.send("/app/chat", {}, JSON.stringify(payload));
-        document.getElementById('message-content').value = '';
+        messageInput.value = '';
     }
+
     async function handleFileUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
-
-        if (!currentChat.id) {
-            alert("请先选择一个聊天窗口，然后再发送文件。");
-            event.target.value = '';
-            return;
-        }
-
+        if (!currentChat.id) { alert("请先选择一个聊天窗口，然后再发送文件。"); event.target.value = ''; return; }
         const formData = new FormData();
         formData.append('file', file);
-
         try {
-            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, {
-                method: 'POST',
-                body: formData
-            });
-
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, { method: 'POST', body: formData });
             if (!res.ok) throw new Error('文件上传失败');
             const result = await res.json();
             const fileUrl = result.url;
-
             let content = '';
             const isImage = file.type.startsWith('image/');
-
             if (isImage) {
-                // 【【核心修改】】
-                // 如果是图片，生成一个带容器的HTML结构
-                // 这个 message-image-container 就是我们的“智能相框”
-                content = `
-                <div class="message-image-container" onclick="window.open('${fileUrl}')">
-                    <img src="${fileUrl}" alt="图片加载中..." />
-                </div>
-            `;
+                content = `<div class="message-image-container" onclick="window.open('${fileUrl}')"><img src="${fileUrl}" alt="图片加载中..." /></div>`;
             } else {
-                // 非图片文件保持不变
                 content = `<a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--c-primary); text-decoration: underline;">文件: ${file.name}</a>`;
             }
-
-            const payload = {
-                senderId: currentUser.id,
-                content: content,
-                messageType: currentChat.type
-            };
-
-            if (currentChat.type === 'GROUP') {
-                payload.groupId = currentChat.id;
-            } else {
-                payload.recipientId = currentChat.id;
-            }
-
+            const payload = { senderId: currentUser.id, content, messageType: currentChat.type };
+            if (currentChat.type === 'GROUP') payload.groupId = currentChat.id;
+            else payload.recipientId = currentChat.id;
             stompClient.send("/app/chat", {}, JSON.stringify(payload));
-
-        } catch (e) {
-            alert('操作失败: ' + e.message);
-            console.error(e);
-        }
-
+        } catch (e) { alert('操作失败: ' + e.message); console.error(e); }
         event.target.value = '';
     }
 
     function renderConversationList(conversations) {
         const list = document.getElementById('conversation-list');
-        list.innerHTML = ''; // 清空旧列表
+        list.innerHTML = '';
 
         if (!conversations || conversations.length === 0) {
             list.innerHTML = '<p style="text-align: center; color: var(--c-text-light); padding: 50px;">暂无会话，找个朋友聊聊吧</p>';
             return;
         }
 
-        // 新增一个内置的辅助函数，专门用于格式化最后一条消息
         const formatLastMessage = (content) => {
             if (!content) return '';
             const trimmedContent = content.trim();
-
-            // 1. 优先判断是否为图片
-            if (trimmedContent.includes('<img') || trimmedContent.includes('message-image-container')) {
-                return '[图片]';
-            }
-            // 2. 判断是否为文件
-            if (trimmedContent.includes('<a href')) {
-                return '[文件]';
-            }
-            // 3. 判断是否为表情
-            if (trimmedContent.includes('/emojis/')) {
-                return '[表情]';
-            }
-            // 4. 如果是普通文本，移除所有HTML标签
+            if (trimmedContent.includes('message-image-container')) return '[图片]';
+            if (trimmedContent.includes('<a href')) return '[文件]';
+            if (trimmedContent.includes('/emojis/')) return '[表情]';
             return trimmedContent.replace(/<[^>]*>?/gm, '');
         };
 
         conversations.forEach(c => {
             const item = document.createElement('div');
             item.className = 'conversation-item';
-            if (c.type === 'PRIVATE') {
-                item.id = `convo-user-${c.conversationId}`;
-            }
+            if (c.type === 'PRIVATE') item.id = `convo-user-${c.conversationId}`;
             item.setAttribute('data-chat-id', c.conversationId);
             item.setAttribute('data-chat-type', c.type);
             item.setAttribute('data-chat-name', c.name);
 
             let avatarHtml = `<div class="avatar">${(c.name || '?').charAt(0).toUpperCase()}</div>`;
-            if (c.avatarUrl) {
-                avatarHtml = `<img class="avatar" src="${c.avatarUrl}" alt="${(c.name || '?').charAt(0)}">`;
-            }
+            if (c.avatarUrl) avatarHtml = `<img class="avatar" src="${c.avatarUrl}" alt="${(c.name || '?').charAt(0)}">`;
 
-            let lastMessageTime = '';
-            if (c.lastMessageTimestamp) {
-                lastMessageTime = new Date(c.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            }
-
-            // 【【【核心修改在这里】】】
-            // 从服务器获取原始的最后一条消息内容
-            const rawLastMessage = c.lastMessageContent || (c.type === 'GROUP' ? '群聊' : '私聊');
-            // 调用我们刚刚定义的辅助函数，强制进行转换
-            const formattedLastMessage = formatLastMessage(rawLastMessage);
-            // 【【【核心修改在这里】】】
-
+            let lastMessageTime = c.lastMessageTimestamp ? new Date(c.lastMessageTimestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            const formattedLastMessage = formatLastMessage(c.lastMessageContent);
             const unreadCount = c.unreadCount || 0;
 
             item.innerHTML = `
-        <div class="avatar-container">
-            ${avatarHtml}
-            ${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}
-        </div>
-        <div class="conversation-details">
-            <span class="conversation-name">${c.name}</span>
-            <div class="last-message-content">${formattedLastMessage}</div>
-        </div>
-        <div class="conversation-meta">
-            <span>${lastMessageTime}</span>
-            ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
-        </div>
-    `;
-
+                <div class="avatar-container">
+                    ${avatarHtml}
+                    ${c.type === 'PRIVATE' ? '<div class="status-dot offline"></div>' : ''}
+                </div>
+                <div class="conversation-details">
+                    <span class="conversation-name">${c.name}</span>
+                    <div class="last-message-content">${formattedLastMessage}</div>
+                </div>
+                <div class="conversation-meta">
+                    <span>${lastMessageTime}</span>
+                    ${unreadCount > 0 ? `<div class="unread-badge">${unreadCount}</div>` : ''}
+                </div>
+            `;
             const avatarContainer = item.querySelector('.avatar-container');
             if (avatarContainer) {
-                avatarContainer.onclick = (event) => {
-                    event.stopPropagation();
-                    showUserProfile(c.conversationId);
-                };
+                avatarContainer.onclick = (event) => { event.stopPropagation(); showUserProfile(c.conversationId); };
             }
             item.onclick = () => selectConversation(item);
-
             list.appendChild(item);
         });
     }
 
     function showMessage(message) {
         const msgWindow = document.getElementById('messages-window');
+        const isMine = message.senderId === currentUser.id;
         const row = document.createElement('div');
         row.id = `message-${message.id}`;
-        row.setAttribute('data-status', message.status || 'SENT');
-        row.className = `message-row ${message.senderId === currentUser.id ? 'mine' : 'other'}`;
+        row.className = `message-row ${isMine ? 'mine' : 'other'}`;
 
-        // --- 优化时间显示逻辑 START ---
-        let time = '';
-        const currentTimestamp = new Date(message.timestamp);
-        // 检查是否需要显示时间戳
-        if (lastMessageTimestamp === null || (currentTimestamp - lastMessageTimestamp) > 5 * 60 * 1000) { // 超过5分钟
-            time = currentTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-        lastMessageTimestamp = currentTimestamp; // 更新上一条消息的时间
-        // --- 优化时间显示逻辑 END ---
+        let senderAvatarHtml = '';
+        let senderNameHtml = '';
 
-
-        // --- 已读回执逻辑 START ---
-        let statusIcon = '';
-        if (message.senderId === currentUser.id) {
-            const iconId = `status-icon-${message.id}`;
-            // 根据消息状态决定初始图标
-            if (message.status === 'READ') {
-                statusIcon = `<span id="${iconId}" class="message-status-icon read" style="color: #4ade80;">✓✓</span>`; // 已读：绿色双勾
-            } else {
-                statusIcon = `<span id="${iconId}" class="message-status-icon sent" style="color: var(--c-text-light);">✓</span>`; // 已发送：灰色单勾
+        // 如果是群聊，并且是别人发的消息
+        if (currentChat.type === 'GROUP' && !isMine) {
+            const sender = userCache[message.senderId];
+            if (sender) {
+                // 创建头像HTML，并绑定点击私聊的事件
+                senderAvatarHtml = `
+                    <div class="avatar" style="width: 40px; height: 40px; margin-right: 10px; cursor: pointer;"
+                         onclick="startPrivateChat({id: ${sender.id}, username: '${sender.username}', avatarUrl: '${sender.avatarUrl || ''}'})">
+                        ${sender.avatarUrl
+                    ? `<img src="${sender.avatarUrl}" style="width:100%; height:100%; border-radius: 50%; object-fit: cover;">`
+                    : `<span>${sender.username.charAt(0).toUpperCase()}</span>`
+                }
+                    </div>`;
+                // 创建用户名HTML
+                senderNameHtml = `<div style="font-size: 13px; font-weight: 600; color: var(--c-primary); margin-bottom: 4px;">${sender.username}</div>`;
             }
         }
-        // --- 已读回执逻辑 END ---
 
+        let time = '';
+        const currentTimestamp = new Date(message.timestamp);
+        if (lastMessageTimestamp === null || (currentTimestamp - lastMessageTimestamp) > 5 * 60 * 1000) {
+            time = currentTimestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        lastMessageTimestamp = currentTimestamp;
 
+        let statusIcon = '';
+        if (isMine) {
+            const iconId = `status-icon-${message.id}`;
+            statusIcon = `<span id="${iconId}" class="message-status-icon sent" style="color: rgba(255,255,255,0.6);">${message.status === 'READ' ? '✓✓' : '✓'}</span>`;
+            if (message.status === 'READ') {
+                setTimeout(() => {
+                    const icon = document.getElementById(iconId);
+                    if(icon) icon.style.color = 'var(--c-online)';
+                }, 100);
+            }
+        }
+
+        // 组装最终的HTML结构
         row.innerHTML = `
-<div class="message-bubble">
-    <div class="message-content">${message.content}</div>
-    <div class="message-timestamp">
-        <span>${time}</span>
-        ${statusIcon}
-    </div>
-</div>`;
+            ${senderAvatarHtml}
+            <div class="message-bubble">
+                ${senderNameHtml}
+                <div class="message-content">${message.content}</div>
+                <div class="message-timestamp">
+                    <span>${time}</span>
+                    ${statusIcon}
+                </div>
+            </div>`;
 
         msgWindow.appendChild(row);
-
-        // 平滑滚动逻辑
-        msgWindow.scrollTo({ top: msgWindow.scrollHeight, behavior: 'smooth' });
+        // 只有当滚动条接近底部时，才自动滚动，以方便用户查看历史记录
+        if (msgWindow.scrollHeight - msgWindow.scrollTop < msgWindow.clientHeight + 100) {
+            msgWindow.scrollTo({ top: msgWindow.scrollHeight, behavior: 'smooth' });
+        }
     }
 
     function startStatusUpdates() {
         if (statusUpdateInterval) clearInterval(statusUpdateInterval);
-        updateAllStatuses();
-        statusUpdateInterval = setInterval(updateAllStatuses, 10000);
-    }
-
-    async function updateAllStatuses() {
-        const privateConvoItems = document.querySelectorAll('.conversation-item[data-chat-type="PRIVATE"]');
-        if (privateConvoItems.length === 0) return;
-        const userIds = Array.from(privateConvoItems).map(item => item.getAttribute('data-chat-id'));
-        try {
-            const res = await fetchWithAuth(`${GATEWAY_URL}/api/presence/status/batch?userIds=${userIds.join(',')}`);
-            const statuses = await res.json();
-            for (const userId in statuses) {
-                const convoItem = document.getElementById(`convo-user-${userId}`);
-                if (convoItem) {
-                    const dot = convoItem.querySelector('.status-dot');
-                    if(dot) {
-                        dot.className = `status-dot ${statuses[userId].toLowerCase()}`;
-                    }
+        const update = async () => {
+            const privateConvoItems = document.querySelectorAll('.conversation-item[data-chat-type="PRIVATE"]');
+            if (privateConvoItems.length === 0) return;
+            const userIds = Array.from(privateConvoItems).map(item => item.getAttribute('data-chat-id'));
+            try {
+                const res = await fetchWithAuth(`${GATEWAY_URL}/api/presence/status/batch?userIds=${userIds.join(',')}`);
+                const statuses = await res.json();
+                for (const userId in statuses) {
+                    const dot = document.querySelector(`#convo-user-${userId} .status-dot`);
+                    if(dot) dot.className = `status-dot ${statuses[userId].toLowerCase()}`;
                 }
-            }
-        } catch (e) { console.error("批量更新状态失败:", e); }
+            } catch (e) { console.error("批量更新状态失败:", e); }
+        };
+        update();
+        statusUpdateInterval = setInterval(update, 10000);
     }
 
     function openNavMenu() {
-        const userAvatar = userCache[currentUser.id]?.avatarUrl;
+        const user = fullCurrentUserProfile;
+        if (!user) {
+            console.error("无法在缓存中找到当前用户信息！");
+            return;
+        }
         const navAvatar = document.getElementById('nav-avatar');
-        if (userAvatar) {
-            navAvatar.innerHTML = `<img src="${userAvatar}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+        if (user.avatarUrl) {
+            navAvatar.innerHTML = `<img src="${user.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
         } else {
-            navAvatar.innerHTML = currentUser.username.charAt(0).toUpperCase();
+            navAvatar.innerHTML = (user.username || '?').charAt(0).toUpperCase();
         }
         document.getElementById('nav-menu').classList.add('open');
         document.getElementById('nav-menu-overlay').style.display = 'flex';
-        document.getElementById('nav-username').innerText = currentUser.username;
+        document.getElementById('nav-username').innerText = user.username;
+        document.getElementById('nav-user-id').innerText = `@${user.customId || 'N/A'}`;
     }
 
     function closeNavMenu() {
@@ -1071,7 +1203,7 @@
 
     function handleTyping() {
         if (!stompClient || !currentChat.id) return;
-        stompClient.send(`/app/typing/${currentChat.id}`, {}, currentUser.username);
+        stompClient.send(`/app/typing/${currentChat.id}`, {}, JSON.stringify({username: currentUser.username, isTyping: true}));
     }
 
     function showSearchResults() {
@@ -1083,115 +1215,56 @@
     }
 
     function hideSearchResults() {
-        setTimeout(() => {
-            document.getElementById('search-results').style.display = 'none';
-        }, 200);
+        setTimeout(() => { document.getElementById('search-results').style.display = 'none'; }, 200);
     }
 
-    function handleUserSearch(event) {
-        console.log('【搜索探针 A】handleUserSearch 函数被触发。');
-        clearTimeout(searchDebounceTimeout);
-        const query = event.target.value.trim();
-        const resultsContainer = document.getElementById('search-results');
-        if (query.length < 2) {
-            resultsContainer.innerHTML = '';
-            resultsContainer.style.display = 'none';
-            return;
-        }
-        console.log('【搜索探针 B】准备搜索, 关键词:', query);
-        searchDebounceTimeout = setTimeout(async () => {
-            try {
-                const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/search?query=${query}`);
-                const users = await response.json();
-                console.log('【搜索探针 C】已获取用户数据，准备渲染:', users);
-                renderSearchResults(users);
-            } catch (error) { console.error("搜索用户失败:", error); }
-        }, 500);
-    }
-
-    function renderSearchResults(users) {
-        console.log('【搜索探针 D】renderSearchResults 被调用，用户数:', users.length);
-        const resultsContainer = document.getElementById('search-results');
-        resultsContainer.innerHTML = '';
-        if (users.length === 0) {
-            resultsContainer.style.display = 'none';
-            return;
-        }
-
-        users.forEach(user => {
-            if (user.id == currentUser.id) return;
-            const item = document.createElement('div');
-            item.className = 'search-result-item';
-
-            if (currentChat && currentChat.type === 'GROUP' && isCurrentUserGroupOwner) {
-                item.onclick = () => addUserToGroup(user);
-            } else {
-                item.onclick = () => startPrivateChat(user);
-            }
-
-            let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
-            if (user.avatarUrl) {
-                avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
-            }
-            item.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${user.username}</div>`;
-            resultsContainer.appendChild(item);
-        });
-        resultsContainer.style.display = 'block';
-    }
-    async function addUserToGroup(user) {
-        if (!currentChat || currentChat.type !== 'GROUP' || !user) return;
-
-        try {
-            const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members`, {
-                method: 'POST',
-                // 【【关键修正】】明确地添加 Content-Type 头
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ userId: user.id })
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(errorBody || '添加成员失败');
-            }
-
-            alert(`成功将 "${user.username}" 添加到群组!`);
-            document.getElementById('user-search-bar').value = '';
-            document.getElementById('search-results').style.display = 'none';
-
-        } catch (error) {
-            alert(`添加失败: ${error.message}`);
-            console.error('添加群成员时出错:', error);
-        }
-    }
     function startPrivateChat(user) {
         hideSearchResults();
         document.getElementById('user-search-bar').value = '';
-        let convoExists = false;
-        document.querySelectorAll('.conversation-item').forEach(item => {
-            if (item.getAttribute('data-chat-id') == user.id && item.getAttribute('data-chat-type') === 'PRIVATE') {
-                convoExists = true;
-                item.click();
-            }
-        });
-        if (!convoExists) {
-            const list = document.getElementById('conversation-list');
-            const item = document.createElement('div');
-            item.className = 'conversation-item';
-            item.id = `convo-user-${user.id}`;
-            item.setAttribute('data-chat-id', user.id);
-            item.setAttribute('data-chat-type', 'PRIVATE');
-            item.setAttribute('data-chat-name', user.username);
-            item.onclick = () => selectConversation(item);
-            let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
-            if(user.avatarUrl) {
-                avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
-            }
-            item.innerHTML = `<div class="avatar-container">${avatarHtml}<div class="status-dot offline"></div></div><div class="conversation-details"><span class="conversation-name">${user.username}</span><div class="last-message-content">私聊</div></div>`;
-            list.prepend(item);
-            item.click();
+        let convoItem = document.querySelector(`.conversation-item[data-chat-id='${user.id}'][data-chat-type='PRIVATE']`);
+
+        if (convoItem) {
+            convoItem.click();
+            return;
         }
+
+        const list = document.getElementById('conversation-list');
+        if (!list) {
+            console.error("代码执行错误: 无法找到 #conversation-list 元素!");
+            return;
+        }
+
+        const newConvoItem = document.createElement('div');
+        newConvoItem.className = 'conversation-item';
+        newConvoItem.id = `convo-user-${user.id}`;
+        newConvoItem.setAttribute('data-chat-id', user.id);
+        newConvoItem.setAttribute('data-chat-type', 'PRIVATE');
+        newConvoItem.setAttribute('data-chat-name', user.username);
+
+        let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
+        if(user.avatarUrl) avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
+
+        newConvoItem.innerHTML = `
+            <div class="avatar-container">${avatarHtml}<div class="status-dot offline"></div></div>
+            <div class="conversation-details">
+                <span class="conversation-name">${user.username}</span>
+                <div class="last-message-content">与 ${user.username} 开始聊天</div>
+            </div>
+            <div class="conversation-meta"><span></span></div>`;
+
+        const avatarContainer = newConvoItem.querySelector('.avatar-container');
+        if (avatarContainer) {
+            avatarContainer.onclick = (event) => { event.stopPropagation(); showUserProfile(user.id); };
+        }
+
+        newConvoItem.onclick = () => selectConversation(newConvoItem);
+
+        list.prepend(newConvoItem);
+
+        // 直接调用函数，而不是模拟点击，这更稳定
+        selectConversation(newConvoItem);
+
+        userCache[user.id] = user;
     }
 
     function openCreateGroupModal() {
@@ -1215,35 +1288,24 @@
                 body: JSON.stringify({ name, description })
             });
             if (!response.ok) throw new Error(await response.text() || '创建群组失败');
-            const newGroup = await response.json();
-            alert(`群组 "${newGroup.name}" 创建成功!`);
+            alert(`群组创建成功!`);
             closeCreateGroupModal();
-            loadAndRenderConversations();
-        } catch (error) {
-            alert(error.message);
-            console.error('创建群组出错:', error);
-        }
+            await loadAndRenderConversations(); // 刷新列表
+        } catch (error) { alert(error.message); console.error('创建群组出错:', error); }
     }
 
     function openProfileModal() {
         closeNavMenu();
-        const currentUserProfile = userCache[currentUser.id] || currentUser;
-        const userAvatar = currentUserProfile.avatarUrl;
-        const userBio = currentUserProfile.bio;
-
-        // 【关键】重置状态，清除上一次可能上传的头像URL
+        const user = userCache[currentUser.id] || currentUser;
         const profileModal = document.getElementById('profile-modal');
         profileModal.removeAttribute('data-new-avatar-url');
 
         const avatarPreview = document.getElementById('profile-avatar-preview');
-        if (userAvatar) {
-            avatarPreview.style.display = 'block';
-            avatarPreview.src = userAvatar;
-        } else {
-            avatarPreview.style.display = 'none';
-        }
-        document.getElementById('profile-username').value = currentUserProfile.username || '';
-        document.getElementById('profile-bio').value = currentUserProfile.bio || '';
+        avatarPreview.src = user.avatarUrl || '';
+        avatarPreview.style.display = user.avatarUrl ? 'block' : 'none';
+
+        document.getElementById('profile-username').value = user.username || '';
+        document.getElementById('profile-bio').value = user.bio || '';
         profileModal.style.display = 'flex';
     }
 
@@ -1255,253 +1317,173 @@
         const bio = document.getElementById('profile-bio').value;
         const username = document.getElementById('profile-username').value.trim();
         const newAvatarUrl = document.getElementById('profile-modal').getAttribute('data-new-avatar-url');
-
-        // 创建一个 payload，只包含有变化的数据
         const payload = {};
-        let hasUpdate = false;
+        const originalUser = userCache[currentUser.id] || {};
 
-        if (username && username !== (userCache[currentUser.id]?.username || '')) {
-            payload.username = username;
-            hasUpdate = true;
-        }
-        if (bio !== (userCache[currentUser.id]?.bio || '')) {
-            payload.bio = bio;
-            hasUpdate = true;
-        }
-        if (newAvatarUrl) {
-            payload.avatarUrl = newAvatarUrl;
-            hasUpdate = true;
-        }
+        if (username && username !== originalUser.username) payload.username = username;
+        if (bio !== (originalUser.bio || '')) payload.bio = bio;
+        if (newAvatarUrl) payload.avatarUrl = newAvatarUrl;
 
-        // 如果没有任何更新，则直接关闭弹窗
-        if (!hasUpdate) {
-            closeProfileModal();
-            return;
-        }
+        if (Object.keys(payload).length === 0) { closeProfileModal(); return; }
 
         try {
-            const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/profile`, {
-                method: 'PUT',
-                body: JSON.stringify(payload) // 发送包含新头像URL和/或简介的请求
-            });
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/profile`, { method: 'PUT', body: JSON.stringify(payload) });
             if (!response.ok) throw new Error('更新个人资料失败');
-
-            // 后端在成功后会通过 RabbitMQ 和 WebSocket 广播事件 (user.profile.updated)
-            // 前端的 handleUserUpdate 函数会自动监听到并刷新UI，所以这里不需要手动更新
-
-            alert('个人资料已更新！');
+            // 后端事件会处理UI更新，这里只需关闭弹窗
             closeProfileModal();
-
-        } catch(e) {
-            alert(e.message);
-            console.error("更新个人资料时出错: ", e);
-        }
-    }
-
-    function handleUserUpdate(updatedUser) {
-        if (!updatedUser || !updatedUser.id) return;
-
-        console.log("【事件】接收到用户资料更新:", updatedUser);
-
-        userCache[updatedUser.id] = updatedUser;
-
-        if (currentUser && updatedUser.id === currentUser.id) {
-            const navAvatar = document.getElementById('nav-avatar');
-            const navUsername = document.getElementById('nav-username');
-            if (updatedUser.avatarUrl) {
-                navAvatar.innerHTML = `<img src="${updatedUser.avatarUrl}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
-            } else {
-                navAvatar.innerHTML = updatedUser.username.charAt(0).toUpperCase();
-            }
-            navUsername.innerText = updatedUser.username;
-        }
-
-        const conversationItem = document.querySelector(`.conversation-item[data-chat-id='${updatedUser.id}'][data-chat-type='PRIVATE']`);
-        if (conversationItem) {
-            // --- 【【核心修正从这里开始】】 ---
-            const avatarContainer = conversationItem.querySelector('.avatar-container');
-            const nameElement = conversationItem.querySelector('.conversation-name');
-
-            if (avatarContainer && updatedUser.avatarUrl) {
-                // 不再使用 outerHTML，而是修改容器内部的内容
-                avatarContainer.innerHTML = `
-                <img class="avatar" src="${updatedUser.avatarUrl}" alt="${updatedUser.username.charAt(0)}">
-                <div class="status-dot offline"></div>
-            `;
-                // 重新绑定可能丢失的事件
-                avatarContainer.onclick = (event) => {
-                    event.stopPropagation();
-                    showUserProfile(updatedUser.id);
-                };
-            }
-
-            if (nameElement) {
-                nameElement.textContent = updatedUser.username;
-            }
-            // --- 【【核心修正到这里结束】】 ---
-        }
-
-        if (currentChat.id == updatedUser.id && currentChat.type === 'PRIVATE') {
-            const headerAvatar = document.getElementById('chat-header-avatar');
-            const headerTitle = document.getElementById('chat-title');
-
-            if (headerAvatar) {
-                if (updatedUser.avatarUrl) {
-                    headerAvatar.innerHTML = `<img src="${updatedUser.avatarUrl}" class="avatar">`;
-                } else {
-                    headerAvatar.innerHTML = `<span>${updatedUser.username.charAt(0).toUpperCase()}</span>`;
-                }
-            }
-            if(headerTitle) {
-                headerTitle.innerText = updatedUser.username;
-            }
-        }
-        loadAndRenderConversations();
+        } catch(e) { alert(e.message); console.error("更新个人资料时出错: ", e); }
     }
 
     function closeViewMembersModal() {
         document.getElementById('view-members-modal').style.display = 'none';
-        // 清空上一次的列表，以免下次打开时看到旧数据
         document.getElementById('members-list-container').innerHTML = '';
     }
 
-    /**
-     * 【【新增函数】】
-     * 获取并显示当前群组的成员列表
-     */
+    function renderSearchResults(users = [], groups = []) {
+        const resultsContainer = document.getElementById('search-results');
+        resultsContainer.innerHTML = '';
+
+        if (users.length === 0 && groups.length === 0) {
+            resultsContainer.innerHTML = '<p style="text-align:center;color:var(--c-text-light);padding:15px;">无结果</p>';
+            resultsContainer.style.display = 'block';
+            return;
+        }
+
+        if (groups.length > 0) {
+            resultsContainer.innerHTML += '<div class="search-results-header">群组</div>';
+            groups.forEach(group => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+                item.onclick = () => startGroupChat(group);
+                let avatarHtml = `<div class="avatar">${group.name.charAt(0).toUpperCase()}</div>`;
+                item.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${group.name}</div>`;
+                resultsContainer.appendChild(item);
+            });
+        }
+
+        if (users.length > 0) {
+            resultsContainer.innerHTML += '<div class="search-results-header">用户</div>';
+            users.forEach(user => {
+                if (user.id == currentUser.id) return;
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+
+                // 【【关键修正】】
+                // 判断：如果当前在群聊中，则点击用户是“添加成员”；否则是“开始私聊”
+                if (currentChat.type === 'GROUP') {
+                    item.onclick = () => addUserToGroup(user);
+                } else {
+                    item.onclick = () => startPrivateChat(user);
+                }
+
+                let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
+                if (user.avatarUrl) {
+                    avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
+                }
+                item.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${user.username}</div>`;
+                resultsContainer.appendChild(item);
+            });
+        }
+
+        resultsContainer.style.display = 'block';
+    }
+
+
+    // 【【确保此函数存在且正确】】
     async function showGroupMembers() {
         if (!currentChat || currentChat.type !== 'GROUP') return;
 
+        console.log(`[调试] 准备查看群 ${currentChat.id} 的成员...`); // 日志1
+
         try {
-            // 1. 调用 group-service 获取成员ID列表
-            const membersRes = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members`);
-            if (!membersRes.ok) throw new Error('获取群成员失败');
-            const memberIds = await membersRes.json();
+            const [membersRes, groupInfoRes] = await Promise.all([
+                fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members/details`),
+                fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}`)
+            ]);
 
-            // 【新增】获取群组的详细信息，我们需要知道谁是群主
-            const groupInfoRes = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}`);
-            if (!groupInfoRes.ok) throw new Error('获取群组信息失败');
+            console.log("[调试] 获取成员详情响应状态:", membersRes.status); // 日志2
+            console.log("[调试] 获取群组信息响应状态:", groupInfoRes.status); // 日志3
+
+            if (!membersRes.ok) throw new Error(`获取群成员失败 (状态: ${membersRes.status})`);
+            const members = await membersRes.json();
+            console.log("[调试] 成功获取成员列表:", members); // 日志4
+
+            if (!groupInfoRes.ok) throw new Error(`获取群组信息失败 (状态: ${groupInfoRes.status})`);
             const groupInfo = await groupInfoRes.json();
+            console.log("[调试] 成功获取群组信息:", groupInfo); // 日志5
+
             const ownerId = groupInfo.ownerId;
+            const listContainer = document.getElementById('members-list-container');
+            listContainer.innerHTML = '';
 
-            if (memberIds.length === 0) {
-                document.getElementById('members-list-container').innerHTML = '<p>这个群还没有成员。</p>';
+            if (!members || members.length === 0) {
+                listContainer.innerHTML = '<p>这个群还没有成员。</p>';
             } else {
-                // 2. 调用 user-service 批量获取成员的详细信息
-                const usersRes = await fetchWithAuth(`${GATEWAY_URL}/api/users/batch?ids=${memberIds.join(',')}`);
-                if (!usersRes.ok) throw new Error('获取成员详细信息失败');
-                const memberUsers = await usersRes.json();
-
-                // 3. 构建HTML并显示
-                const listContainer = document.getElementById('members-list-container');
-                listContainer.innerHTML = ''; // 先清空
-                memberUsers.forEach(user => {
+                members.forEach(user => {
                     const memberItem = document.createElement('div');
                     memberItem.className = 'search-result-item';
-
                     let avatarHtml = `<div class="avatar">${user.username.charAt(0).toUpperCase()}</div>`;
-                    if (user.avatarUrl) {
-                        avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
-                    }
+                    if (user.avatarUrl) avatarHtml = `<img class="avatar" src="${user.avatarUrl}" alt="${user.username.charAt(0)}">`;
 
-                    // 【核心修改】判断是否要显示“移除”按钮
                     let removeBtnHtml = '';
-                    // 如果当前登录用户是群主，并且列表中的这个成员不是群主自己
                     if (currentUser.id === ownerId && user.id !== ownerId) {
                         removeBtnHtml = `<button class="btn-cancel" style="margin-left: auto;" onclick="removeGroupMember(${user.id}, '${user.username}')">移除</button>`;
                     }
-
                     memberItem.innerHTML = `${avatarHtml}<div style="margin-left: 10px;">${user.username}</div>${removeBtnHtml}`;
-                    memberItem.querySelector('.avatar').onclick = (event) => {
-                        event.stopPropagation();
-                        showUserProfile(user.id);
-                    };
+
+                    const avatarElement = memberItem.querySelector('.avatar');
+                    if(avatarElement) {
+                        avatarElement.onclick = (event) => {
+                            event.stopPropagation();
+                            closeViewMembersModal();
+                            showUserProfile(user.id);
+                        };
+                    }
                     listContainer.appendChild(memberItem);
                 });
             }
-
             document.getElementById('view-members-title').innerText = `"${currentChat.name}" 的成员`;
             document.getElementById('view-members-modal').style.display = 'flex';
-
         } catch (error) {
             alert(error.message);
-            console.error('查看群成员时出错:', error);
+            console.error('[调试] 查看群成员时出错:', error); // 日志6
         }
     }
+
     async function removeGroupMember(userIdToRemove, username) {
-        if (!confirm(`您确定要将 "${username}" 移出群聊吗？`)) {
-            return;
-        }
+        if (!confirm(`您确定要将 "${username}" 移出群聊吗？`)) return;
         if (!currentChat || currentChat.type !== 'GROUP') return;
-
         try {
-            const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members/${userIdToRemove}`, {
-                method: 'DELETE'
-                // DELETE请求通常不需要body和Content-Type，所以这里保持简洁即可
-            });
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(errorBody || '移除成员失败');
-            }
-
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members/${userIdToRemove}`, { method: 'DELETE' });
+            if (!response.ok) throw new Error(await response.text() || '移除成员失败');
             alert(`已成功将 "${username}" 移出群组。`);
-            showGroupMembers(); // 刷新成员列表
-
-        } catch (error) {
-            alert(`移除失败: ${error.message}`);
-            console.error('移除群成员时出错:', error);
-        }
+            await showGroupMembers(); // 刷新成员列表
+        } catch (error) { alert(`移除失败: ${error.message}`); console.error('移除群成员时出错:', error); }
     }
 
     async function handleAvatarUpload(event) {
         const file = event.target.files[0];
         if (!file) return;
-
         const formData = new FormData();
         formData.append('file', file);
-
         try {
-            // 1. 调用 file-service 上传文件
-            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, {
-                method: 'POST',
-                body: formData
-            });
-
+            const res = await fetchWithAuth(`${GATEWAY_URL}/api/files/upload`, { method: 'POST', body: formData });
             if (!res.ok) throw new Error('头像上传失败');
             const result = await res.json();
-            const newAvatarUrl = result.url; // 获取到新的头像 URL
-
-            // 2. 更新个人资料弹窗中的头像预览
-            const avatarPreview = document.getElementById('profile-avatar-preview');
-            avatarPreview.src = newAvatarUrl;
-            avatarPreview.style.display = 'block';
-
-            // 3. 【关键】将新的 URL 存储在按钮的一个自定义属性中，方便“保存”时获取
+            const newAvatarUrl = result.url;
+            document.getElementById('profile-avatar-preview').src = newAvatarUrl;
+            document.getElementById('profile-avatar-preview').style.display = 'block';
             document.getElementById('profile-modal').setAttribute('data-new-avatar-url', newAvatarUrl);
-
-        } catch (e) {
-            alert('操作失败: ' + e.message);
-            console.error(e);
-        } finally {
-            // 清空文件输入框的值，以便用户可以再次选择同一个文件
-            event.target.value = '';
-        }
+        } catch (e) { alert('操作失败: ' + e.message); console.error(e); }
+        event.target.value = '';
     }
+
     document.addEventListener('DOMContentLoaded', () => {
-        // 确保在DOM加载完毕后获取元素
         const emojiWrapper = document.getElementById('emoji-wrapper');
         const emojiPanel = document.getElementById('emoji-panel');
-
-        // 检查元素是否存在，防止报错
-        if (!emojiWrapper || !emojiPanel) {
-            console.error('Emoji wrapper or panel not found!');
-            return;
-        }
-
+        if (!emojiWrapper || !emojiPanel) return;
         let emojiLoaded = false;
         let hidePanelTimeout;
-
         async function loadEmojis() {
             if (emojiLoaded) return;
             emojiLoaded = true;
@@ -1521,149 +1503,122 @@
                     emojiImg.onclick = () => sendEmojiAsImage(fileName);
                     emojiPanel.appendChild(emojiImg);
                 });
-            } catch (error) {
-                console.error("加载表情列表失败:", error);
-                emojiPanel.innerHTML = '加载失败';
-            }
+            } catch (error) { console.error("加载表情列表失败:", error); emojiPanel.innerHTML = '加载失败'; }
         }
-
-        emojiWrapper.addEventListener('mouseenter', () => {
-            clearTimeout(hidePanelTimeout);
-            loadEmojis();
-            emojiPanel.style.display = 'grid';
-        });
-
-        emojiWrapper.addEventListener('mouseleave', () => {
-            hidePanelTimeout = setTimeout(() => {
-                emojiPanel.style.display = 'none';
-            }, 300);
-        });
+        emojiWrapper.addEventListener('mouseenter', () => { clearTimeout(hidePanelTimeout); loadEmojis(); emojiPanel.style.display = 'grid'; });
+        emojiWrapper.addEventListener('mouseleave', () => { hidePanelTimeout = setTimeout(() => { emojiPanel.style.display = 'none'; }, 300); });
     });
-    // ---- 最终版悬停逻辑 END ----
 
-    // 发送表情的函数 (确保这个函数存在)
     function sendEmojiAsImage(fileName) {
         if (!currentChat.id || !stompClient) return;
         const content = `<img src="/emojis/${fileName}" style="width: 28px; height: 28px; vertical-align: middle;">`;
-        const payload = {
-            senderId: currentUser.id,
-            content: content,
-            messageType: currentChat.type,
-            groupId: currentChat.type === 'GROUP' ? currentChat.id : null,
-            recipientId: currentChat.type === 'PRIVATE' ? currentChat.id : null,
-        };
+        const payload = { senderId: currentUser.id, content, messageType: currentChat.type, groupId: currentChat.type === 'GROUP' ? currentChat.id : null, recipientId: currentChat.type === 'PRIVATE' ? currentChat.id : null };
         stompClient.send("/app/chat", {}, JSON.stringify(payload));
         document.getElementById('emoji-panel').style.display = 'none';
     }
 
     const messageInput = document.getElementById('message-content');
     const mentionsPopup = document.getElementById('mentions-popup');
-
-    messageInput.addEventListener('input', handleMentionInput);
-
-    async function handleMentionInput(event) {
+    messageInput.addEventListener('input', async (event) => {
         const text = event.target.value;
         const atIndex = text.lastIndexOf('@');
-
-        // 只有在群聊中，且光标在@符号后才触发
         if (currentChat.type === 'GROUP' && atIndex !== -1) {
             const query = text.substring(atIndex + 1);
             try {
-                console.log('正在为群组ID获取成员, currentChat.id 的值是:', currentChat.id);
-                console.log('完整的 currentChat 对象是:', currentChat);
-                // 【核心修正】确保这里正确地构造了请求URL
                 const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members/details`);
-
-                if (!response.ok) { // 检查请求是否成功
-                    throw new Error(`服务器错误: ${response.status}`);
-                }
-
-                const members = await response.json(); // 现在 members 一定是一个数组
-
-                // 根据输入过滤成员
-                const filteredMembers = members.filter(m =>
-                    m.username.toLowerCase().includes(query.toLowerCase())
-                );
-
-                renderMentionsPopup(filteredMembers, atIndex);
-
-            } catch (error) {
-                console.error('获取群成员失败:', error);
-                mentionsPopup.style.display = 'none';
-            }
+                if (!response.ok) throw new Error(`服务器错误: ${response.status}`);
+                const members = await response.json();
+                const filteredMembers = members.filter(m => m.username.toLowerCase().includes(query.toLowerCase()));
+                if (filteredMembers.length === 0) { mentionsPopup.style.display = 'none'; return; }
+                mentionsPopup.innerHTML = '';
+                filteredMembers.forEach(member => {
+                    const item = document.createElement('div');
+                    item.className = 'mention-item';
+                    item.onclick = () => {
+                        const newText = text.substring(0, atIndex) + `@${member.username} `;
+                        messageInput.value = newText;
+                        messageInput.focus();
+                        mentionsPopup.style.display = 'none';
+                    };
+                    let avatarHtml = `<div class="avatar">${member.username.charAt(0).toUpperCase()}</div>`;
+                    if(userCache[member.id] && userCache[member.id].avatarUrl) avatarHtml = `<img src="${userCache[member.id].avatarUrl}" class="avatar">`;
+                    item.innerHTML = `${avatarHtml}<span>${member.username}</span>`;
+                    mentionsPopup.appendChild(item);
+                });
+                mentionsPopup.style.display = 'block';
+            } catch (error) { console.error('获取群成员失败:', error); mentionsPopup.style.display = 'none'; }
         } else {
             mentionsPopup.style.display = 'none';
         }
-    }
+    });
 
-    function renderMentionsPopup(members, atIndex) {
-        if (members.length === 0) {
-            mentionsPopup.style.display = 'none';
-            return;
-        }
-        mentionsPopup.innerHTML = '';
-        members.forEach(member => {
-            const item = document.createElement('div');
-            item.className = 'mention-item';
-            item.onclick = () => selectMention(member, atIndex);
-            // 假设userCache中有头像信息
-            const user = userCache[member.id] || {};
-            let avatarHtml = `<div class="avatar">${member.username.charAt(0).toUpperCase()}</div>`;
-            if(user.avatarUrl) {
-                avatarHtml = `<img src="${user.avatarUrl}" class="avatar">`;
-            }
-            item.innerHTML = `${avatarHtml}<span>${member.username}</span>`;
-            mentionsPopup.appendChild(item);
-        });
-        mentionsPopup.style.display = 'block';
-    }
-    function selectMention(member, atIndex) {
-        const currentText = messageInput.value;
-        // 替换@query为@username
-        const newText = currentText.substring(0, atIndex) + `@${member.username} `;
-        messageInput.value = newText;
-        messageInput.focus();
-        mentionsPopup.style.display = 'none';
-    }
     async function showUserProfile(userId) {
         if (!userId) return;
         try {
             const response = await fetchWithAuth(`${GATEWAY_URL}/api/users/${userId}`);
             if (!response.ok) throw new Error('无法获取该用户信息');
             const user = await response.json();
-            // 填充数据
             document.getElementById('profile-page-avatar').src = user.avatarUrl || `https://ui-avatars.com/api/?name=${user.username}&background=random`;
             document.getElementById('profile-page-username').innerText = user.username;
             document.getElementById('profile-page-custom-id').innerText = `@${user.customId}`;
             document.getElementById('profile-page-bio').innerText = user.bio || '这位用户很神秘，什么也没留下...';
-            viewingProfileUserId = user.id; // 记录当前查看的用户ID
-            // 显示弹窗
+            viewingProfileUserId = user.id;
             const modal = document.getElementById('user-profile-modal');
             modal.style.display = 'flex';
-            // 使用一个微小的延迟来触发CSS动效
             setTimeout(() => modal.classList.add('visible'), 10);
-        } catch (error) {
-            alert(error.message);
-        }
+        } catch (error) { alert(error.message); }
     }
-    // 关闭用户主页
     function closeUserProfileModal() {
         const modal = document.getElementById('user-profile-modal');
         modal.classList.remove('visible');
-        // 等待动效结束后再隐藏
-        setTimeout(() => {
-            modal.style.display = 'none';
-            viewingProfileUserId = null; // 清理ID
-        }, 300);
+        setTimeout(() => { modal.style.display = 'none'; viewingProfileUserId = null; }, 300);
     }
-    // 从主页上发起聊天
     function startChatFromProfile() {
         if (viewingProfileUserId) {
+            // 从缓存或新请求获取用户信息来启动聊天
             const userToChat = userCache[viewingProfileUserId];
             if (userToChat) {
                 startPrivateChat(userToChat);
-                closeUserProfileModal(); // 发起聊天后关闭主页
+                closeUserProfileModal();
+            } else {
+                fetchWithAuth(`${GATEWAY_URL}/api/users/${viewingProfileUserId}`).then(res => res.json()).then(user => {
+                    startPrivateChat(user);
+                    closeUserProfileModal();
+                });
             }
+        }
+    }
+    async function addUserToGroup(user) {
+        if (!currentChat || currentChat.type !== 'GROUP' || !user) return;
+
+        if (!currentGroupInfo || currentUser.id !== currentGroupInfo.ownerId) {
+            alert("操作失败：只有群主才能添加成员。");
+            return;
+        }
+
+        try {
+            const response = await fetchWithAuth(`${GATEWAY_URL}/api/groups/${currentChat.id}/members`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId: user.id })
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.text();
+                throw new Error(errorBody || '添加成员失败');
+            }
+
+            alert(`成功将 "${user.username}" 添加到群组!`);
+            document.getElementById('user-search-bar').value = '';
+            hideSearchResults();
+            if (document.getElementById('view-members-modal').style.display === 'flex') {
+                await showGroupMembers();
+            }
+        } catch (error) {
+            alert(`添加失败: ${error.message}`);
+            console.error('添加群成员时出错:', error);
         }
     }
 </script>

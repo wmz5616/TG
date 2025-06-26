@@ -1,6 +1,6 @@
 package com.example.groupservice.service;
 
-import com.example.groupservice.client.UserClient; // 【新增】导入 UserClient
+import com.example.groupservice.client.UserClient;
 import com.example.groupservice.dto.CreateGroupRequest;
 import com.example.groupservice.dto.GroupMemberDTO;
 import com.example.groupservice.model.Group;
@@ -112,5 +112,9 @@ public class GroupServiceImpl implements GroupService {
             return List.of();
         }
         return groupRepository.findAllById(groupIds);
+    }
+    @Override
+    public List<Group> searchGroups(String name) {
+        return groupRepository.findByNameContainingIgnoreCase(name);
     }
 }

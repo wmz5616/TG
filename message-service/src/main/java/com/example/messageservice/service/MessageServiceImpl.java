@@ -15,18 +15,16 @@ import com.example.messageservice.repository.MessageRepository;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.*;
-import java.math.BigInteger; // 【新增】导入
-import java.sql.Timestamp; // 【新增】导入
-import java.util.stream.Collectors; // 【新增】导入
-import java.util.function.Function; // 【新增】导入
+import java.sql.Timestamp;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 
 @Service
 public class MessageServiceImpl implements MessageService {
-
     private final MessageRepository messageRepository;
     private final UserClient userClient;
     private final GroupClient groupClient;
@@ -45,238 +43,113 @@ public class MessageServiceImpl implements MessageService {
         this.rabbitTemplate = rabbitTemplate;
         this.messagingTemplate = messagingTemplate;
     }
-
-    // 【修改】这个方法现在是新消息的总入口
     @Override
     public void processAndSendMessage(Message message) {
-        // 【注意】这里假设你的 Feign Client 中有 userExists 方法，如果没有需要自行添加
-        // if (!userClient.userExists(message.getSenderId())) {
-        //     throw new IllegalArgumentException("发送者用户不存在: " + message.getSenderId());
-        // }
-
-        if (MessageType.PRIVATE.equals(message.getMessageType())) {
-            // 私聊消息的权限校验等...
-        } else if (MessageType.GROUP.equals(message.getMessageType())) {
-            // 群聊消息的权限校验等...
-        }
-
-        // 设置消息初始状态为 SENT
         message.setStatus(MessageStatus.SENT);
-
-        // 将消息发送到RabbitMQ，让监听器去异步处理
         String routingKey = MessageType.PRIVATE.equals(message.getMessageType()) ? "im.message.private" : "im.message.group";
         rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, routingKey, message);
     }
-
-    // 【新增】处理已读回执的核心逻辑
     @Override
     public void markMessagesAsRead(ReadReceiptPayload payload) {
-        // 1. 根据ID列表从数据库查出所有相关的消息
         List<Message> messages = messageRepository.findAllById(payload.getMessageIds());
-
         for (Message message : messages) {
-            // 2. 安全检查：确保是接收者本人将消息标记为已读
             boolean isRecipient = message.getRecipientId() != null && message.getRecipientId().equals(payload.getReaderId());
-            // 对于群聊，任何群成员都可以触发（暂不实现，仅为示例）
-            boolean isGroupMember = message.getGroupId() != null;
-
-            if (isRecipient || isGroupMember) {
-                // 3. 如果消息状态不是“已读”，则更新它
-                if (message.getStatus() != MessageStatus.READ) {
-                    message.setStatus(MessageStatus.READ);
-                    messageRepository.save(message); // 4. 保存更新到数据库
-
-                    // 5. 【关键】将“已读”这个状态更新，通知给原始发件人
-                    MessageStatusUpdate statusUpdate = new MessageStatusUpdate(message.getId(), MessageStatus.READ);
-                    messagingTemplate.convertAndSendToUser(
-                            message.getSenderId().toString(), // 目标用户：发件人
-                            "/queue/status",                  // 发送到他私有的状态队列
-                            statusUpdate                      // 发送内容
-                    );
-                }
+            boolean isGroupMember = message.getGroupId() != null; // 简化处理
+            if ((isRecipient || isGroupMember) && message.getStatus() != MessageStatus.READ) {
+                message.setStatus(MessageStatus.READ);
+                messageRepository.save(message);
+                MessageStatusUpdate statusUpdate = new MessageStatusUpdate(message.getId(), MessageStatus.READ);
+                messagingTemplate.convertAndSendToUser(
+                        message.getSenderId().toString(),
+                        "/queue/status",
+                        statusUpdate
+                );
             }
         }
     }
-
-    // --- 保留原有的查询历史记录等方法 ---
     @Override
     public Message sendMessage(Message message) {
         processAndSendMessage(message);
-        // 立即返回原始消息给Controller，用于前端的即时UI更新
         return message;
     }
-
     @Override
     public List<Message> getChatHistory(Long user1Id, Long user2Id) {
         return messageRepository.findChatHistory(user1Id, user2Id);
     }
-
     @Override
     public List<Message> getGroupChatHistory(Long groupId) {
         return messageRepository.findByGroupIdOrderByTimestampAsc(groupId);
     }
-
     @Override
     public List<Long> getPrivateConversationPartnerIds(Long userId) {
         return messageRepository.findPrivateConversationPartnerIds(userId);
     }
-
     @Override
     public Message saveAndBroadcastMessage(Message message) {
-        // 1. 将消息存入数据库，这一步会为 message 对象生成 ID 和 timestamp
         Message savedMessage = messageRepository.save(message);
-
-        // 2. 根据消息类型，通过WebSocket推送到目的地
         if (MessageType.PRIVATE.equals(savedMessage.getMessageType())) {
-            // 推送给接收者
-            messagingTemplate.convertAndSendToUser(
-                    savedMessage.getRecipientId().toString(),
-                    "/queue/messages",
-                    savedMessage
-            );
-            // 推送回给发送者（用于多端同步和UI更新）
-            messagingTemplate.convertAndSendToUser(
-                    savedMessage.getSenderId().toString(),
-                    "/queue/messages",
-                    savedMessage
-            );
+            messagingTemplate.convertAndSendToUser(savedMessage.getRecipientId().toString(), "/queue/messages", savedMessage);
+            messagingTemplate.convertAndSendToUser(savedMessage.getSenderId().toString(), "/queue/messages", savedMessage);
         } else if (MessageType.GROUP.equals(savedMessage.getMessageType())) {
-            // 群聊消息直接广播到群组的 topic
             messagingTemplate.convertAndSend("/topic/group/" + savedMessage.getGroupId(), savedMessage);
         }
-
         return savedMessage;
     }
-
     @Override
     public List<ConversationDTO> getConversations(Long userId) {
-        // 1. 获取用户所在的群组ID列表
-        List<Long> groupIds = new ArrayList<>();
-        try {
-            groupIds = groupClient.getGroupIdsForUser(userId);
-        } catch (Exception e) {
-            System.out.println("获取群组列表失败，可能用户未加入任何群组: " + e.getMessage());
-        }
-        if (groupIds.isEmpty()) {
-            groupIds.add(0L); // 防止SQL查询因IN ()为空而报错
-        }
-
-        // 2. 调用数据库查询，获取基础会话信息
-        List<Map<String, Object>> rawResults = messageRepository.findConversationsByUserId(userId, groupIds);
-        if (rawResults.isEmpty()) {
-            return Collections.emptyList();
-        }
-
-        // 3. 从结果中分离出需要查询详情的 ID 列表
-        List<Long> userIdsToFetch = rawResults.stream()
-                .filter(row -> "PRIVATE".equals(row.get("type")))
-                .map(row -> ((Number) row.get("conversationId")).longValue())
-                .collect(Collectors.toList());
-
-        List<Long> groupIdsToFetch = rawResults.stream()
-                .filter(row -> "GROUP".equals(row.get("type")))
-                .map(row -> ((Number) row.get("conversationId")).longValue())
-                .collect(Collectors.toList());
-
-        // 4. 【【核心修改】】批量获取用户和群组的详细信息
-        // 我们先声明变量，然后在下面的逻辑中只对它进行一次赋值
-        Map<Long, UserDTO> userInfoMap;
-        if (!userIdsToFetch.isEmpty()) {
-            try {
-                userInfoMap = userClient.getUsersByIds(userIdsToFetch).stream()
+        List<Long> groupIds = groupClient.getGroupIdsForUser(userId);
+        List<Long> privatePartnerIds = messageRepository.findPrivateConversationPartnerIds(userId);
+        List<Long> allUserIdsToFetch = new ArrayList<>(privatePartnerIds);
+        List<Long> allGroupIdsToFetch = new ArrayList<>(groupIds);
+        Map<Long, UserDTO> userInfoMap = allUserIdsToFetch.isEmpty() ? Collections.emptyMap() :
+                userClient.getUsersByIds(allUserIdsToFetch).stream()
                         .collect(Collectors.toMap(UserDTO::getId, Function.identity()));
-            } catch (Exception e) {
-                System.out.println("批量获取用户信息失败: " + e.getMessage());
-                userInfoMap = Collections.emptyMap(); // 出错时赋一个空值
-            }
-        } else {
-            userInfoMap = Collections.emptyMap(); // 列表为空时赋一个空值
-        }
 
-        // 对 groupInfoMap 进行同样的操作
-        Map<Long, GroupDTO> groupInfoMap;
-        if (!groupIdsToFetch.isEmpty()){
-            try {
-                groupInfoMap = groupClient.getGroupsByIds(groupIdsToFetch).stream()
+        Map<Long, GroupDTO> groupInfoMap = allGroupIdsToFetch.isEmpty() ? Collections.emptyMap() :
+                groupClient.getGroupsByIds(allGroupIdsToFetch).stream()
                         .collect(Collectors.toMap(GroupDTO::getId, Function.identity()));
-            } catch (Exception e) {
-                System.out.println("批量获取群组信息失败: " + e.getMessage());
-                groupInfoMap = Collections.emptyMap();
+        List<Map<String, Object>> messageMetas = messageRepository.findConversationsByUserId(userId, groupIds.isEmpty() ? List.of(-1L) : groupIds);
+        Map<Long, Map<String, Object>> messageMetaMap = messageMetas.stream()
+                .collect(Collectors.toMap(
+                        row -> ((Number) row.get("conversationId")).longValue(),
+                        Function.identity()
+                ));
+        Stream<ConversationDTO> privateConvos = privatePartnerIds.stream().map(partnerId -> {
+            UserDTO partnerInfo = userInfoMap.get(partnerId);
+            if (partnerInfo == null) return null;
+            Map<String, Object> meta = messageMetaMap.get(partnerId);
+            String lastMessage = meta != null ? formatLastMessageForList((String)meta.get("lastMessageContent")) : "开始聊天吧";
+            LocalDateTime timestamp = meta != null && meta.get("lastMessageTimestamp") != null ? ((Timestamp) meta.get("lastMessageTimestamp")).toLocalDateTime() : null;
+            Long unreadCount = meta != null ? ((Number) meta.get("unreadCount")).longValue() : 0L;
+            return new ConversationDTO(partnerId, MessageType.PRIVATE, partnerInfo.getUsername(), partnerInfo.getAvatarUrl(), lastMessage, timestamp, unreadCount);
+        }).filter(Objects::nonNull);
+        Stream<ConversationDTO> groupConvos = groupIds.stream().map(groupId -> {
+            GroupDTO groupInfo = groupInfoMap.get(groupId);
+            if (groupInfo == null) return null;
+            Map<String, Object> meta = messageMetaMap.get(groupId);
+            String lastMessage = meta != null ? formatLastMessageForList((String)meta.get("lastMessageContent")) : "群聊已创建";
+            LocalDateTime timestamp = meta != null && meta.get("lastMessageTimestamp") != null ? ((Timestamp) meta.get("lastMessageTimestamp")).toLocalDateTime() : null;
+            Long unreadCount = meta != null ? ((Number) meta.get("unreadCount")).longValue() : 0L;
+            if (timestamp == null) {
             }
-        } else {
-            groupInfoMap = Collections.emptyMap();
-        }
-
-
-        // 5. 最终组装
-        Map<Long, UserDTO> finalUserInfoMap = userInfoMap;
-        Map<Long, GroupDTO> finalGroupInfoMap = groupInfoMap;
-        return rawResults.stream().map(row -> {
-            Long conversationId = ((Number) row.get("conversationId")).longValue();
-            String typeStr = (String) row.get("type");
-            MessageType type = MessageType.valueOf(typeStr);
-
-            String name = "未知";
-            String avatarUrl = "";
-
-            if (type == MessageType.PRIVATE) {
-                UserDTO user = finalUserInfoMap.get(conversationId);
-                if (user != null) {
-                    name = user.getUsername();
-                    avatarUrl = user.getAvatarUrl();
-                }
-            } else { // GROUP
-                GroupDTO group = finalGroupInfoMap.get(conversationId);
-                if (group != null) {
-                    name = group.getName();
-                    // 暂无群头像，可预留
-                }
-            }
-
-            String lastMessageContent = (String) row.get("lastMessageContent");
-            String formattedLastMessage = formatLastMessageForList(lastMessageContent);
-
-            LocalDateTime lastMessageTimestamp = row.get("lastMessageTimestamp") != null ? ((Timestamp) row.get("lastMessageTimestamp")).toLocalDateTime() : null;
-            Long unreadCount = ((Number) row.get("unreadCount")).longValue();
-
-            return new ConversationDTO(conversationId, type, name, avatarUrl, lastMessageContent, lastMessageTimestamp, unreadCount);
-        }).collect(Collectors.toList());
+            return new ConversationDTO(groupId, MessageType.GROUP, groupInfo.getName(), null, lastMessage, timestamp, unreadCount);
+        }).filter(Objects::nonNull);
+        return Stream.concat(privateConvos, groupConvos)
+                .sorted(Comparator.comparing(
+                        ConversationDTO::getLastMessageTimestamp,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .collect(Collectors.toList());
     }
     private String formatLastMessageForList(String content) {
-        if (content == null || content.isBlank()) {
-            return "";
-        }
-
-        // 创建一个临时的、去掉前后空格的副本用于判断
+        if (content == null || content.isBlank()) return "";
         String trimmedContent = content.trim();
-
-        // 1. 最优先判断：内容是否就是一个URL，并且是常见的图片格式
-        //    这可以处理直接发送图片链接作为消息的情况
-        if (trimmedContent.matches("^https?://.*\\.(jpeg|jpg|png|gif|bmp|webp)$")) {
+        if (trimmedContent.matches("^https?://.*\\.(jpeg|jpg|png|gif|bmp|webp)$") || trimmedContent.contains("<img") || trimmedContent.contains("message-image-container")) {
             return "[图片]";
         }
-
-        // 2. 其次，判断是否包含HTML图片标签或我们约定的图片容器
-        if (trimmedContent.contains("<img") || trimmedContent.contains("message-image-container")) {
-            return "[图片]";
-        }
-
-        // 3. 判断是否为文件链接
-        if (trimmedContent.contains("<a href")) {
-            return "[文件]";
-        }
-
-        // 4. 判断是否为表情/贴纸
-        if (trimmedContent.contains("/emojis/")) {
-            return "[表情]";
-        }
-
-        // 5. 如果以上都不是，则视为普通文本处理
-        String plainText = trimmedContent.replaceAll("<[^>]*>", ""); // 移除所有HTML标签
-        if (plainText.length() > 20) {
-            return plainText.substring(0, 20) + "..."; // 截断过长的文本
-        }
-        return plainText;
+        if (trimmedContent.contains("<a href")) return "[文件]";
+        if (trimmedContent.contains("/emojis/")) return "[表情]";
+        String plainText = trimmedContent.replaceAll("<[^>]*>", "");
+        return plainText.length() > 20 ? plainText.substring(0, 20) + "..." : plainText;
     }
-
 }

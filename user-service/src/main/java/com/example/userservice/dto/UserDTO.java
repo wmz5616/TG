@@ -10,5 +10,5 @@ public class UserDTO {
     private Long id;
     private String username;
     private String avatarUrl;
-    // 注意：这里不包含 password 等敏感字段
+    private String customId;
 }

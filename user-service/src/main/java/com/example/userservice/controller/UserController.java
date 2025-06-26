@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import com.example.userservice.dto.ProfileUpdateRequest; // 导入
+import com.example.userservice.dto.ProfileUpdateRequest;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.stream.Collectors;
@@ -44,26 +44,23 @@ public class UserController {
 
     @GetMapping("/batch")
     public List<UserDTO> getUsersByIds(@RequestParam List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
         List<User> users = userService.getUsersByIds(ids);
         return users.stream().map(user -> {
             UserDTO dto = new UserDTO();
             dto.setId(user.getId());
             dto.setUsername(user.getUsername());
             dto.setAvatarUrl(user.getAvatarUrl());
+            dto.setCustomId(user.getCustomId()); // 【【新增】】 填充 customId
             return dto;
         }).collect(Collectors.toList());
     }
-
-    // 【【核心修改】】
-// 1. 路径从 "/{id}/profile" 改为 "/profile"
-// 2. 方法参数不再接收 @PathVariable，而是直接从 @RequestHeader 获取用户ID
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(
             @RequestHeader("X-Authenticated-User-Id") Long authenticatedUserId,
             @RequestBody ProfileUpdateRequest request) {
-
-        // 不再需要比较ID，因为我们只信任从header中获取的authenticatedUserId
-        // 这个ID是由API网关从JWT中解析后安全注入的，客户端无法伪造
         User updatedUser = userService.updateUserProfile(authenticatedUserId, request);
         return ResponseEntity.ok(updatedUser);
     }

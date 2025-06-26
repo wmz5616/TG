@@ -8,8 +8,7 @@ import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
-
-import java.util.Map; // 【新增】导入Map
+import java.util.Map;
 
 @Controller
 public class ChatController {
@@ -35,20 +34,12 @@ public class ChatController {
     }
 
     // 【【关键修正】】
-    // 处理“正在输入”事件
     @MessageMapping("/typing/{chatId}")
     public void handleTyping(
             @DestinationVariable String chatId,
-            @Payload String username // 前端仍然传来一个简单的用户名字符串
+            @Payload Map<String, Object> typingInfo // 直接接收 Map 对象
     ) {
-        // 创建一个 Map 对象，它会被自动序列化为 JSON
-        // 例如：{"username":"testuser1", "isTyping":true}
-        Map<String, Object> typingInfo = Map.of(
-                "username", username,
-                "isTyping", true // 附带一个状态，方便前端处理
-        );
-
-        // 将这个 JSON 对象广播给对应聊天室的 topic
+        // 后端不再需要自己构建 Map，直接将收到的信息广播出去
         messagingTemplate.convertAndSend("/topic/typing/" + chatId, typingInfo);
     }
 }

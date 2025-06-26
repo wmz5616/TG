@@ -15,4 +15,5 @@ public interface GroupService {
     List<GroupMemberDTO> getGroupMembersWithDetails(Long groupId);
     List<Long> getGroupIdsByUserId(Long userId);
     List<Group> getGroupsByIds(List<Long> groupIds);
+    List<Group> searchGroups(String name);
 }

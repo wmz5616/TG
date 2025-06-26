@@ -9,5 +9,5 @@ public class UserDTO {
     private String username;
     private String avatarUrl;
     private String bio;
-    // 我们只需要那些需要广播给前端的信息
+    private String customId;
 }

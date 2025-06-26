@@ -90,4 +90,8 @@ public class GroupController {
     public List<Group> getGroupsByIds(@RequestParam("ids") List<Long> ids) {
         return groupService.getGroupsByIds(ids);
     }
+    @GetMapping("/search")
+    public ResponseEntity<List<Group>> searchGroups(@RequestParam("name") String name) {
+        return ResponseEntity.ok(groupService.searchGroups(name));
+    }
 }

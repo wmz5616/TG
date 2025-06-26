@@ -9,19 +9,13 @@ import java.util.Map;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
-    // --- 已有的、保持不变的方法 ---
     @Query("SELECT m FROM Message m WHERE (m.senderId = :user1Id AND m.recipientId = :user2Id) OR (m.senderId = :user2Id AND m.recipientId = :user1Id) ORDER BY m.timestamp ASC")
     List<Message> findChatHistory(@Param("user1Id") Long user1Id, @Param("user2Id") Long user2Id);
-
     List<Message> findByGroupIdOrderByTimestampAsc(Long groupId);
-
     @Query("SELECT m.senderId FROM Message m WHERE m.recipientId = :userId AND m.messageType = 'PRIVATE' " +
             "UNION " +
             "SELECT m.recipientId FROM Message m WHERE m.senderId = :userId AND m.messageType = 'PRIVATE'")
     List<Long> findPrivateConversationPartnerIds(@Param("userId") Long userId);
-
-
-    // --- 【【这是我们修正后的、唯一的新方法】】 ---
     @Query(value = """
     WITH ranked_messages AS (
         SELECT *,
